@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Buurt Quiz</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;overflow:hidden}
+        body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}
+        #map{width:100%;height:100%}
+        .overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.92);z-index:2000;display:flex;align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch}
+        .card{background:white;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.15);padding:28px 32px;max-width:400px;width:calc(100% - 32px);text-align:center;margin:20px 0}
+        .card h1,.card h2{font-size:22px;font-weight:700;color:#1a1a2e;margin-bottom:6px}
+        .subtitle{font-size:14px;color:#777;margin-bottom:20px}
+        .gemeente-wrap{position:relative;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+        .switch-gemeente-btn{flex-shrink:0;background:white;border:2px solid #e0e0e0;border-radius:10px;width:42px;height:42px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.06);transition:all 0.2s;font-size:18px;color:#555}
+        .switch-gemeente-btn:hover{border-color:#2563eb;color:#2563eb;box-shadow:0 2px 12px rgba(37,99,235,0.2)}
+        .gemeente-input{width:100%;padding:10px 14px;border:2px solid #e0e0e0;border-radius:10px;font-size:16px;font-weight:600;color:#1a1a2e;text-align:center;background:#f8fafc;cursor:pointer;outline:none;transition:border-color 0.2s}
+        .gemeente-input:focus{border-color:#2563eb;background:white}
+        .gemeente-input::placeholder{color:#aaa;font-weight:400}
+        .gemeente-dropdown{position:absolute;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:white;border:2px solid #2563eb;border-top:none;border-radius:0 0 10px 10px;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,0.12);display:none}
+        .gemeente-dropdown.open{display:block}
+        .gemeente-option{padding:10px 14px;cursor:pointer;font-size:15px;text-align:left;transition:background 0.1s}
+        .gemeente-option:hover,.gemeente-option.active{background:#eff6ff;color:#2563eb}
+        .highscore-row{display:flex;justify-content:space-around;margin-bottom:18px;padding:8px 4px;background:#f8fafc;border-radius:10px;gap:2px}
+        .hs-item{text-align:center;flex:1;min-width:0}.hs-label{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap}
+        .hs-value{font-size:16px;font-weight:800;color:#2563eb}.hs-value.none{color:#ccc}
+        .mastery-section{margin-bottom:18px}
+        .mastery-row{display:flex;gap:8px;margin-bottom:6px;align-items:center}
+        .mastery-label{font-size:12px;color:#777;width:55px;text-align:right;flex-shrink:0}
+        .mastery-bar-bg{flex:1;height:14px;background:#f1f5f9;border-radius:7px;overflow:hidden}
+        .mastery-bar-fill{height:100%;border-radius:7px;transition:width 0.4s ease}
+        .mastery-bar-fill.wijken{background:linear-gradient(90deg,#2563eb,#60a5fa)}
+        .mastery-bar-fill.buurten{background:linear-gradient(90deg,#16a34a,#4ade80)}
+        .mastery-count{font-size:11px;font-weight:700;color:#555;width:45px;text-align:left;flex-shrink:0}
+        .level-btn{display:block;width:100%;padding:12px 14px;margin-bottom:8px;border:2px solid #e0e0e0;border-radius:10px;background:white;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;color:#333;-webkit-tap-highlight-color:transparent;text-align:left}
+        .level-btn:active{transform:scale(0.98)}.level-btn:disabled{opacity:0.4;pointer-events:none}
+        .level-desc{font-weight:400;color:#999;font-size:12px;display:block;margin-top:2px}
+        .level-btn.l0{border-color:#c4b5fd;color:#5b21b6}.level-btn.l0:hover{background:#f5f3ff}
+        .level-btn.l1{border-color:#86efac;color:#166534}.level-btn.l1:hover{background:#f0fdf4}
+        .level-btn.l2{border-color:#93c5fd;color:#1e40af}.level-btn.l2:hover{background:#eff6ff}
+        .level-btn.l3{border-color:#fde68a;color:#92400e}.level-btn.l3:hover{background:#fffbeb}
+        .level-btn.l4{border-color:#fdba74;color:#9a3412}.level-btn.l4:hover{background:#fff7ed}
+        .level-btn.l5{border-color:#fca5a5;color:#991b1b}.level-btn.l5:hover{background:#fef2f2}
+        .mp-section{margin-bottom:18px;padding-top:14px;border-top:1px solid #eee}
+        .mp-section-title{font-size:12px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+        .mp-btns{display:flex;gap:10px}
+        .mp-btn{flex:1;padding:12px;border:2px solid #c084fc;border-radius:10px;background:white;font-size:14px;font-weight:600;color:#7c3aed;cursor:pointer;transition:all 0.2s}
+        .mp-btn:hover{background:#faf5ff}.mp-btn:active{transform:scale(0.97)}.mp-btn:disabled{opacity:0.4;pointer-events:none}
+        .room-code{font-size:36px;font-weight:800;letter-spacing:8px;color:#7c3aed;margin:16px 0;font-family:monospace}
+        .lobby-status{font-size:14px;color:#777;margin-bottom:16px}
+        .lobby-status.connected{color:#16a34a;font-weight:600}.lobby-status.error{color:#dc2626}
+        .join-input{width:160px;padding:10px;border:2px solid #c084fc;border-radius:10px;font-size:24px;font-weight:800;text-align:center;letter-spacing:6px;text-transform:uppercase;outline:none;font-family:monospace;color:#7c3aed}
+        .join-input:focus{border-color:#7c3aed}
+        .pick-btn{display:block;width:100%;padding:12px;margin-bottom:8px;border:2px solid #e0e0e0;border-radius:10px;background:white;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;color:#333;text-align:center}
+        .pick-btn:hover{background:#f8fafc;border-color:#2563eb;color:#2563eb}.pick-btn:active{transform:scale(0.97)}
+        .pick-grid{max-height:300px;overflow-y:auto}
+        .hud{position:absolute;top:12px;left:12px;right:12px;z-index:1000;display:none}
+        .hud-card{background:white;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.15);padding:12px 18px 14px;text-align:center}
+        .hud-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+        .round-badge{font-size:12px;color:#999;white-space:nowrap}
+        .score-wrap{display:flex;align-items:center;gap:10px}
+        .score-total{font-size:14px;font-weight:700;color:#2563eb;white-space:nowrap}
+        .streak-badge{font-size:13px;font-weight:700;color:#ea580c;white-space:nowrap;display:none}
+        .streak-badge.active{display:inline;animation:streakPop 0.3s ease}
+        @keyframes streakPop{0%{transform:scale(1.4)}100%{transform:scale(1)}}
+        .mp-scores{display:flex;justify-content:center;gap:20px;margin-bottom:6px;font-size:13px;font-weight:700;display:none}
+        .mp-scores .me{color:#2563eb}.mp-scores .opp{color:#7c3aed}
+        .question-text{font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:10px;line-height:1.3}
+        .bonus-tag{display:inline-block;background:#3b82f6;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-bottom:4px}
+        .training-tag{display:inline-block;background:#f59e0b;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-bottom:4px}
+        .hud-actions{display:flex;gap:8px;justify-content:center;margin-top:8px}
+        .hud-btn{padding:5px 14px;border:1.5px solid #e0e0e0;border-radius:8px;background:#f8fafc;font-size:12px;font-weight:600;color:#777;cursor:pointer;transition:all 0.15s}
+        .hud-btn:active{transform:scale(0.95)}.hud-btn:hover{background:#f1f5f9;color:#555}
+        .hud-btn.stop{color:#dc2626;border-color:#fca5a5}.hud-btn.stop:hover{background:#fef2f2}
+        .countdown{font-size:36px;font-weight:800;font-variant-numeric:tabular-nums;transition:color 0.2s}
+        .countdown.high{color:#16a34a}.countdown.mid{color:#ca8a04}.countdown.low{color:#dc2626}.countdown.zero{color:#e5e7eb}
+        .feedback{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.8);z-index:1500;padding:16px 28px;border-radius:12px;font-size:18px;font-weight:700;opacity:0;transition:all 0.3s ease;pointer-events:none;text-align:center;max-width:300px}
+        .feedback.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+        .feedback.correct{background:#dcfce7;color:#166534;border:2px solid #86efac}
+        .feedback.wrong{background:#fef2f2;color:#991b1b;border:2px solid #fca5a5}
+        .feedback.timeout{background:#fffbeb;color:#92400e;border:2px solid #fde68a}
+        .feedback .pts{font-size:13px;font-weight:600;display:block;margin-top:2px}
+        .end-score{font-size:48px;font-weight:800;margin:12px 0}
+        .end-score.great{color:#166534}.end-score.ok{color:#92400e}.end-score.poor{color:#991b1b}
+        .end-detail{font-size:14px;color:#777;margin-bottom:8px}
+        .end-highscore{font-size:13px;font-weight:700;color:#2563eb;margin-bottom:16px;display:none}
+        .end-highscore.new{display:block;animation:streakPop 0.4s ease}
+        .end-mastery{margin-bottom:16px}
+        .mp-result{margin-bottom:16px;padding:12px;background:#faf5ff;border-radius:10px}
+        .mp-result .mp-winner{font-size:16px;font-weight:700;color:#7c3aed;margin-bottom:6px}
+        .mp-result .mp-vs{font-size:14px;color:#555}
+        .end-btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+        .end-btn{padding:12px 24px;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s}
+        .end-btn:active{transform:scale(0.97)}
+        .end-btn.primary{background:#2563eb;color:white}.end-btn.primary:hover{background:#1d4ed8}
+        .end-btn.secondary{background:#f1f5f9;color:#475569}.end-btn.secondary:hover{background:#e2e8f0}
+        .end-btn.share{background:#25D366;color:white}.end-btn.share:hover{background:#1da851}
+        .heatmap-bar{position:absolute;top:12px;left:12px;right:12px;z-index:1000;display:none}
+        .heatmap-card{background:white;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.15);padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+        .heatmap-legend{display:flex;gap:10px;flex:1;flex-wrap:wrap;font-size:12px;color:#555}
+        .heatmap-legend span{display:flex;align-items:center;gap:3px;white-space:nowrap}
+        .hl-dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+        .loading-overlay{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.85);z-index:2000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+        .spinner{width:40px;height:40px;border:4px solid #e0e0e0;border-top-color:#2563eb;border-radius:50%;animation:spin 0.8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}.loading-text{font-size:15px;color:#555;font-weight:500}
+        .leaflet-control-zoom{display:none}@media(min-width:600px){.leaflet-control-zoom{display:block}}
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<div class="hud" id="hud"><div class="hud-card">
+    <div class="hud-top"><div class="round-badge" id="roundBadge">1/10</div><div class="score-wrap"><div class="streak-badge" id="streakBadge"></div><div class="score-total" id="scoreTotal">0</div></div></div>
+    <div class="mp-scores" id="mpScores"><span class="me">Jij: <span id="mpMe">0</span></span><span class="opp">Tegenstander: <span id="mpOpp">0</span></span></div>
+    <div id="scopeLabel" style="font-size:12px;color:#2563eb;font-weight:600;margin-bottom:4px;display:none"></div>
+    <div class="question-text" id="questionText">—</div>
+    <div class="countdown high" id="countdown">15</div>
+    <div class="hud-actions"><button class="hud-btn" onclick="skipRound()">Overslaan</button><button class="hud-btn stop" onclick="stopGame()">Stoppen</button></div>
+</div></div>
+<div class="heatmap-bar" id="heatmapBar"><div class="heatmap-card"><div class="heatmap-legend"><span><i class="hl-dot" style="background:#22c55e"></i> Goed</span><span><i class="hl-dot" style="background:#facc15"></i> Misklik</span><span><i class="hl-dot" style="background:#ef4444"></i> Niet gevonden</span></div><button class="end-btn primary" onclick="showStart()" style="padding:8px 18px;font-size:13px">Terug</button></div></div>
+<div class="feedback" id="feedback"></div>
+
+<div class="overlay" id="startOverlay"><div class="card">
+    <h1 id="mainTitle">Leer je gemeente kennen</h1>
+    <p style="font-size:13px;color:#999;margin-bottom:2px;font-style:italic">Voor wijk-weters en buurt-bazen</p>
+    <p class="subtitle">Klik zo snel mogelijk op het juiste gebied.<br>Elke seconde telt, elke misklik kost punten!</p>
+    <div class="gemeente-wrap" id="gemeenteWrap"><div style="position:relative;flex:1"><input type="text" class="gemeente-input" id="gemeenteInput" placeholder="Zoek een gemeente..." autocomplete="off" /><div class="gemeente-dropdown" id="gemeenteDropdown"></div></div><button class="switch-gemeente-btn" id="switchGemeenteBtn" onclick="showGemeenteSelector()" title="Andere gemeente kiezen">&#128269;</button></div>
+    <div class="mastery-section" id="masterySection"></div>
+    <div class="highscore-row" id="highscoreRow"></div>
+    <div id="levelButtons"></div>
+    <div class="mp-section"><div class="mp-section-title">Multiplayer</div><div class="mp-btns"><button class="mp-btn" id="mpHostBtn" onclick="hostGame()" disabled>Start Battle</button><button class="mp-btn" id="mpJoinBtn" onclick="showJoinUI()" disabled>Doe mee</button></div></div>
+</div></div>
+
+<div class="overlay" id="pickerOverlay" style="display:none"><div class="card" id="pickerCard"></div></div>
+<div class="overlay" id="lobbyOverlay" style="display:none"><div class="card"><h2 id="lobbyTitle">Multiplayer</h2><div id="lobbyContent"></div><button class="end-btn secondary" onclick="leaveLobby()" style="margin-top:14px">Annuleren</button></div></div>
+
+<div class="overlay" id="endOverlay" style="display:none"><div class="card">
+    <h2 id="endTitle">Klaar!</h2>
+    <div class="end-score" id="endScore">0</div>
+    <div class="end-detail" id="endDetail"></div>
+    <div class="mp-result" id="mpResult" style="display:none"><div class="mp-winner" id="mpWinner"></div><div class="mp-vs" id="mpVs"></div></div>
+    <div class="end-highscore" id="endHighscore">Nieuw record!</div>
+    <div class="end-mastery" id="endMastery"></div>
+    <div class="end-btns"><button class="end-btn secondary" onclick="showHeatmap()">Hittekaart</button><button class="end-btn share" onclick="shareScore()">Delen</button><button class="end-btn primary" onclick="showStart()">Opnieuw</button></div>
+</div></div>
+
+<div class="loading-overlay" id="loading"><div class="spinner"></div><div class="loading-text">Gemeenten laden...</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const ROUND_TIME=15, BONUS_TIME=8, MISCLICK_PENALTY=3, MAX_ROUNDS=10, STREAK_THRESHOLD=3;
+
+const LEVEL_DEFS=[
+    // {key:'gemeenten',label:'Gemeente-Gok',css:'l0',desc:'Vind gemeenten op de kaart van NL',noGemeente:true},
+    {key:'wijken',label:'Wijk-Wijzer',css:'l1',desc:'Ken jij alle wijken?'},
+    {key:'wijkbonus',label:'Buurt-Bonus',css:'l2',desc:'Wijk goed? Pak de bonusbuurten!'},
+    {key:'training',label:'Buurt-Beginner',css:'l3',desc:'Oefen buurten op je eigen tempo'},
+    {key:'cluster',label:'Buurt-Beter',css:'l4',desc:'Mix van wijken & buurten per gebied'},
+    {key:'buurten',label:'Buurt-Baas',css:'l5',desc:'Alle buurten, geen genade!'}
+];
+
+
+const map=L.map('map',{center:[52.2,5.3],zoom:8,zoomControl:false,tap:true,touchZoom:true,dragging:true});
+L.control.zoom({position:'topright'}).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OSM &copy; CARTO | CBS/PDOK',maxZoom:19}).addTo(map);
+
+// State
+let gemeenteList=[],selectedGemeente=null;
+let wijkenData=null,buurtenData=null,wijkenLayer=null,buurtenLayer=null;
+let buurtColorMap={},wijkColorMap={},buurtLayers={},wijkLayers={},neighborCache={};
+let gameActive=false,currentLevelKey=null,currentMode=null;
+let currentRound=0,totalRounds=0,score=0,maxScore=0;
+let targetFeature=null,targetType=null,roundLocked=false;
+let animFrame=null,roundStartTime=0,roundPoints=0;
+let usedCodes=[],streak=0,retryQueue=[],roundHistory=[];
+let activeWijkCodes=[],activeWijkName='';
+// Bonus phase (level 2)
+let bonusPhase=false,bonusQueue=[];
+// Training mode (level 3)
+let trainingMode=false,trainingCorrect=0,trainingTotal=0;
+// Multiplayer
+let peer=null,conn=null,isHost=false,isMultiplayer=false,opponentScore=0,prePickedTargets=[];
+// Clusters cache
+let clusterDef=null;
+// Gemeente level
+let gemeenteGeoData=null,gemeenteLayer=null,gemeenteLayers={},gemeenteColorMap={};
+
+const wijkColors=['#2563eb','#dc2626','#16a34a','#ea580c','#9333ea','#0891b2','#ca8a04','#be185d','#4f46e5','#15803d','#b91c1c','#0d9488','#7c3aed','#c2410c','#0369a1','#a16207','#9d174d','#059669','#6d28d9','#be123c'];
+const buurtPalette=['#60a5fa','#f87171','#4ade80','#fb923c','#c084fc','#22d3ee','#facc15','#f472b6','#818cf8','#34d399','#fca5a5','#2dd4bf','#a78bfa','#fb7185','#38bdf8','#fbbf24','#e879f9','#6ee7b7','#93c5fd','#f9a8d4','#a5b4fc','#86efac','#fcd34d','#67e8f9','#c4b5fd'];
+const heatColors={perfect:'#22c55e',misclick:'#facc15',fail:'#ef4444'};
+function shuffleArray(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function shuffleColors(){if(!wijkenData||!buurtenData)return;const sw=shuffleArray(wijkColors),sb=shuffleArray(buurtPalette);wijkenData.features.forEach((f,i)=>{wijkColorMap[f.properties.wijkcode]=sw[i%sw.length];});buurtenData.features.forEach((f,i)=>{buurtColorMap[f.properties.buurtcode]=sb[i%sb.length];});}
+
+// WFS
+const WFS_BASE='https://service.pdok.nl/cbs/wijkenbuurten/2024/wfs/v1_0';
+function buildWfsUrl(t,c){const f=`<Filter><PropertyIsEqualTo><PropertyName>gemeentecode</PropertyName><Literal>${c}</Literal></PropertyIsEqualTo></Filter>`;return `${WFS_BASE}?${new URLSearchParams({service:'WFS',version:'2.0.0',request:'GetFeature',typeName:t,outputFormat:'json',srsName:'EPSG:4326',FILTER:f})}`;}
+
+async function loadGemeenteList(){
+    try{
+    // Check localStorage cache first
+    const CACHE_KEY='quiz-gemeentelist-2024';let cached;
+    try{cached=JSON.parse(localStorage.getItem(CACHE_KEY));}catch(e){}
+    if(cached&&cached.length){gemeenteList=cached;}
+    else{const p=new URLSearchParams({service:'WFS',version:'2.0.0',request:'GetFeature',typeName:'wijkenbuurten:gemeenten',outputFormat:'json',srsName:'EPSG:4326',propertyName:'gemeentecode,gemeentenaam',count:'500'});
+    const d=await(await fetch(`${WFS_BASE}?${p}`)).json();
+    gemeenteList=d.features.map(f=>({code:f.properties.gemeentecode,naam:f.properties.gemeentenaam})).filter(g=>g.naam).sort((a,b)=>a.naam.localeCompare(b.naam));
+    try{localStorage.setItem(CACHE_KEY,JSON.stringify(gemeenteList));}catch(e){}}
+    document.getElementById('loading').style.display='none';
+    if(!selectedGemeente){renderLevelButtons();const s=getSavedGemeente();if(s&&gemeenteList.find(g=>g.code===s.code))selectGemeente(s.code,s.naam);}
+    }catch(e){console.error(e);document.getElementById('loading').innerHTML='<div style="text-align:center;color:#dc2626"><b>Laden mislukt</b><br>Probeer te herladen</div>';}
+}
+function getSavedGemeente(){try{return JSON.parse(localStorage.getItem('quiz-gemeente'));}catch(e){return null;}}
+function saveGemeente(c,n){localStorage.setItem('quiz-gemeente',JSON.stringify({code:c,naam:n}));}
+
+// Gemeente selector
+const gemInput=document.getElementById('gemeenteInput'),gemDropdown=document.getElementById('gemeenteDropdown');
+gemInput.addEventListener('focus',()=>{gemInput.select();showGemDD(gemInput.value);});
+gemInput.addEventListener('input',()=>{showGemDD(gemInput.value);});
+gemInput.addEventListener('keydown',e=>{const its=gemDropdown.querySelectorAll('.gemeente-option'),act=gemDropdown.querySelector('.gemeente-option.active');if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();let i=Array.from(its).indexOf(act);i=e.key==='ArrowDown'?Math.min(i+1,its.length-1):Math.max(i-1,0);its.forEach(x=>x.classList.remove('active'));if(its[i]){its[i].classList.add('active');its[i].scrollIntoView({block:'nearest'});}}else if(e.key==='Enter'){e.preventDefault();if(act)act.click();else if(its.length)its[0].click();}else if(e.key==='Escape'){gemDropdown.classList.remove('open');gemInput.blur();}});
+document.addEventListener('click',e=>{if(!document.getElementById('gemeenteWrap').contains(e.target))gemDropdown.classList.remove('open');});
+function showGemDD(q){const s=q.toLowerCase().trim(),fl=s?gemeenteList.filter(g=>g.naam.toLowerCase().includes(s)):gemeenteList;gemDropdown.innerHTML=fl.length?fl.slice(0,50).map(g=>`<div class="gemeente-option" data-code="${g.code}" data-naam="${g.naam}">${g.naam}</div>`).join(''):'<div style="padding:14px;color:#999;text-align:center">Geen resultaten</div>';gemDropdown.querySelectorAll('.gemeente-option').forEach(el=>{el.addEventListener('mousedown',e=>{e.preventDefault();selectGemeente(el.dataset.code,el.dataset.naam);gemDropdown.classList.remove('open');gemInput.blur();});});gemDropdown.classList.add('open');}
+
+async function selectGemeente(code,naam){
+    if(selectedGemeente&&selectedGemeente.code===code&&wijkenData){gemInput.value=naam;return;}
+    selectedGemeente={code,naam};saveGemeente(code,naam);gemInput.value=naam;
+    gemInput.readOnly=true;
+    document.getElementById('mainTitle').textContent=`Leer ${naam} kennen`;document.title=`${naam} Quiz`;
+    setButtonsEnabled(false);const ld=document.getElementById('loading');ld.querySelector('.loading-text').textContent=`${naam} laden...`;ld.style.display='flex';
+    try{if(buurtenLayer){map.removeLayer(buurtenLayer);buurtenLayer=null;}if(wijkenLayer){map.removeLayer(wijkenLayer);wijkenLayer=null;}buurtLayers={};wijkLayers={};buurtColorMap={};wijkColorMap={};neighborCache={};
+    const[wR,bR]=await Promise.all([fetch(buildWfsUrl('wijkenbuurten:wijken',code)),fetch(buildWfsUrl('wijkenbuurten:buurten',code))]);wijkenData=await wR.json();buurtenData=await bR.json();
+    wijkenData.features.forEach((f,i)=>{wijkColorMap[f.properties.wijkcode]=wijkColors[i%wijkColors.length];});buurtenData.features.forEach((f,i)=>{buurtColorMap[f.properties.buurtcode]=buurtPalette[i%buurtPalette.length];});
+    buildMaps();buildNeighborCache();createLayers();buildClusters();renderHighscores();renderMastery();fitBounds();setButtonsEnabled(true);
+    }catch(e){console.error(e);showFeedback('wrong','Laden mislukt');}ld.style.display='none';
+}
+
+function renderLevelButtons(){document.getElementById('levelButtons').innerHTML=LEVEL_DEFS.map(l=>`<button class="level-btn ${l.css}" id="btn_${l.key}" onclick="onLevelClick('${l.key}')" ${l.noGemeente?'':'disabled'}>${l.label} <span class="level-desc">${l.desc}</span></button>`).join('');}
+function setButtonsEnabled(on){LEVEL_DEFS.forEach(l=>{const e=document.getElementById('btn_'+l.key);if(e){if(l.noGemeente)e.disabled=false;else e.disabled=!on;}});const h=document.getElementById('mpHostBtn'),j=document.getElementById('mpJoinBtn');if(h)h.disabled=!on;if(j)j.disabled=!on;}
+
+// Mappings
+let buurtToWijkCode={},wijkNameMap={},wijkBuurten={};
+function buildMaps(){wijkNameMap={};buurtToWijkCode={};wijkBuurten={};wijkenData.features.forEach(f=>{wijkNameMap[f.properties.wijkcode]=f.properties.wijknaam;wijkBuurten[f.properties.wijkcode]=[];});buurtenData.features.forEach(f=>{const wc='WK'+f.properties.buurtcode.substring(2,8);buurtToWijkCode[f.properties.buurtcode]=wc;if(!wijkBuurten[wc])wijkBuurten[wc]=[];wijkBuurten[wc].push(f);});}
+function findWijkCodeForBuurt(bf){return buurtToWijkCode[bf.properties.buurtcode]||null;}
+function findWijkForBuurt(bf){const wc=findWijkCodeForBuurt(bf);return wc?(wijkNameMap[wc]||null):null;}
+function getWijkNeighbors(wc){const my=wijkBuurten[wc]||[],s=new Set();my.forEach(b=>{const bc=b.properties.buurtcode;if(neighborCache[bc])neighborCache[bc].forEach(nc=>{if(buurtToWijkCode[nc]&&buurtToWijkCode[nc]!==wc)s.add(buurtToWijkCode[nc]);});});return[...s];}
+function buildNeighborCache(){neighborCache={};const tol=0.0005,all=[...buurtenData.features,...wijkenData.features],gc=f=>f.properties.buurtcode||f.properties.wijkcode,gp=f=>f.geometry.type==='MultiPolygon'?f.geometry.coordinates.flatMap(p=>p[0]):f.geometry.coordinates[0],grid={},cs=tol*3;all.forEach(f=>{const c=gc(f);neighborCache[c]=new Set();gp(f).forEach(([x,y])=>{const gx=Math.floor(x/cs),gy=Math.floor(y/cs);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const k=`${gx+dx},${gy+dy}`;if(!grid[k])grid[k]=[];grid[k].push({code:c,x,y});}});});all.forEach(f=>{const c=gc(f);gp(f).forEach(([x,y])=>{const k=`${Math.floor(x/cs)},${Math.floor(y/cs)}`;(grid[k]||[]).forEach(it=>{if(it.code!==c&&Math.abs(it.x-x)<tol&&Math.abs(it.y-y)<tol)neighborCache[c].add(it.code);});});});}
+
+function createLayers(){buurtenLayer=L.geoJSON(buurtenData,{style:f=>({fillColor:buurtColorMap[f.properties.buurtcode]||'#999',weight:1,opacity:0.6,color:'#999',fillOpacity:0.12}),onEachFeature:(f,l)=>{buurtLayers[f.properties.buurtcode]=l;l.on('click',()=>handleGuess(f));}}).addTo(map);wijkenLayer=L.geoJSON(wijkenData,{interactive:false,style:f=>({fillColor:'transparent',fillOpacity:0,weight:3.5,opacity:0.6,color:wijkColorMap[f.properties.wijkcode]||'#333'}),onEachFeature:(f,l)=>{wijkLayers[f.properties.wijkcode]=l;}}).addTo(map);}
+
+// Clusters (~3-4 wijken, ~15 buurten)
+function buildClusters(){
+    if(!selectedGemeente||!wijkenData)return;
+    const TARGET_BUURTEN=15;
+    const allWijks=wijkenData.features.filter(f=>f.properties.wijknaam).map(f=>f.properties.wijkcode);
+    const used=new Set();clusterDef=[];
+    for(const wc of allWijks){
+        if(used.has(wc))continue;
+        const cluster=[wc];used.add(wc);
+        const bCount=c=>(wijkBuurten[c]||[]).filter(b=>b.properties.buurtnaam).length;
+        let total=bCount(wc);
+        // Greedily add neighbors: min 3 wijken, target ~15 buurten
+        const addNeighbors=()=>{const candidates=[];cluster.forEach(c=>{getWijkNeighbors(c).forEach(n=>{if(!used.has(n)&&!candidates.includes(n))candidates.push(n);});});return candidates;};
+        while(cluster.length<3||total<TARGET_BUURTEN){
+            const candidates=addNeighbors();
+            if(!candidates.length)break;
+            const n=candidates[0];cluster.push(n);used.add(n);total+=bCount(n);
+        }
+        const name=cluster.length===1?wijkNameMap[wc]:wijkNameMap[cluster[0]]+' e.o.';
+        clusterDef.push({name,wijkCodes:cluster});
+    }
+}
+
+// Mastery
+function getMasteryKey(){return `quiz-mastery-${selectedGemeente?selectedGemeente.code:''}`;}
+function getMastery(){try{return JSON.parse(localStorage.getItem(getMasteryKey())||'{}');}catch(e){return {};}}
+function saveMastery(d){localStorage.setItem(getMasteryKey(),JSON.stringify(d));}
+function updateMastery(){const m=getMastery();roundHistory.forEach(h=>{if(h.result==='perfect')m[h.code]=(m[h.code]||0)+1;});saveMastery(m);}
+function getMasteryCounts(){const m=getMastery();let wK=0,wT=0,bK=0,bT=0;if(wijkenData){wT=wijkenData.features.filter(f=>f.properties.wijknaam).length;wijkenData.features.forEach(f=>{if(f.properties.wijknaam&&m[f.properties.wijkcode])wK++;});}if(buurtenData){bT=buurtenData.features.filter(f=>f.properties.buurtnaam).length;buurtenData.features.forEach(f=>{if(f.properties.buurtnaam&&m[f.properties.buurtcode])bK++;});}return{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT};}
+function renderMastery(){const{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT}=getMasteryCounts();const wp=wT?Math.round(wK/wT*100):0,bp=bT?Math.round(bK/bT*100):0;document.getElementById('masterySection').innerHTML=`<div class="mastery-row"><div class="mastery-label">Wijken</div><div class="mastery-bar-bg"><div class="mastery-bar-fill wijken" style="width:${wp}%"></div></div><div class="mastery-count">${wK}/${wT}</div></div><div class="mastery-row"><div class="mastery-label">Buurten</div><div class="mastery-bar-bg"><div class="mastery-bar-fill buurten" style="width:${bp}%"></div></div><div class="mastery-count">${bK}/${bT}</div></div>`;}
+function renderEndMastery(){const{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT}=getMasteryCounts();const wp=wT?Math.round(wK/wT*100):0,bp=bT?Math.round(bK/bT*100):0;document.getElementById('endMastery').innerHTML=`<div style="font-size:12px;color:#999;margin-bottom:6px">Je kent nu:</div><div class="mastery-row"><div class="mastery-label">Wijken</div><div class="mastery-bar-bg"><div class="mastery-bar-fill wijken" style="width:${wp}%"></div></div><div class="mastery-count">${wK}/${wT}</div></div><div class="mastery-row"><div class="mastery-label">Buurten</div><div class="mastery-bar-bg"><div class="mastery-bar-fill buurten" style="width:${bp}%"></div></div><div class="mastery-count">${bK}/${bT}</div></div>`;}
+
+// Highscores
+function getHsKey(){return `quiz-hs-${selectedGemeente?selectedGemeente.code:''}`;}
+function getHighscores(){try{return JSON.parse(localStorage.getItem(getHsKey())||'{}');}catch(e){return {};}}
+function saveHighscore(l,s){const hs=getHighscores();if(!hs[l]||s>hs[l]){hs[l]=s;localStorage.setItem(getHsKey(),JSON.stringify(hs));return true;}return false;}
+function renderHighscores(){const hs=getHighscores(),labs={gemeenten:'Gem',wijken:'Wijk',wijkbonus:'W+B',training:'Train',cluster:'Blok',buurten:'Buurt'};document.getElementById('highscoreRow').innerHTML=LEVEL_DEFS.map(l=>{const v=hs[l.key]!=null?hs[l.key]:'—';return `<div class="hs-item"><div class="hs-label">${labs[l.key]||l.key}</div><div class="hs-value ${hs[l.key]==null?'none':''}">${v}</div></div>`;}).join('');}
+
+// Share (compact)
+function getLevelLabel(k){return(LEVEL_DEFS.find(l=>l.key===k)||{}).label||k;}
+function createScoreImage(){const ln=getLevelLabel(currentLevelKey),pct=maxScore?Math.round(score/maxScore*100):0,{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT}=getMasteryCounts(),gn=selectedGemeente?selectedGemeente.naam:'Quiz';const W=640,H=420,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');const g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#1e3a5f');g.addColorStop(1,'#0f1b2d');x.fillStyle=g;x.fillRect(0,0,W,H);x.globalAlpha=0.04;for(let i=0;i<W;i+=20){x.strokeStyle='#fff';x.beginPath();x.moveTo(i,0);x.lineTo(i,H);x.stroke();}x.globalAlpha=1;x.fillStyle='#fff';x.font='bold 28px "Segoe UI",system-ui,sans-serif';x.textAlign='center';x.fillText(`Leer ${gn} kennen`,W/2,50);x.fillStyle='#8faabe';x.font='italic 16px "Segoe UI",system-ui,sans-serif';x.fillText('Voor wijk-weters en buurt-bazen',W/2,76);x.font='bold 15px "Segoe UI",system-ui,sans-serif';const bw=x.measureText(ln).width+28,bc={gemeenten:'#7c3aed',wijken:'#22c55e',wijkbonus:'#3b82f6',training:'#eab308',cluster:'#f97316',buurten:'#ef4444'};x.fillStyle=bc[currentLevelKey]||'#2563eb';rr(x,(W-bw)/2,92,bw,30,15);x.fill();x.fillStyle='#fff';x.fillText(ln,W/2,112);x.fillStyle=pct>=70?'#22c55e':pct>=40?'#eab308':'#ef4444';x.font='bold 72px "Segoe UI",system-ui,sans-serif';x.fillText(`${score}`,W/2,195);x.fillStyle='#8faabe';x.font='18px "Segoe UI",system-ui,sans-serif';x.fillText(`van ${maxScore} punten (${pct}%)`,W/2,222);const by=258,bW2=260,bH=18,bX=(W-bW2)/2,wp=wT?wK/wT:0,bp=bT?bK/bT:0;x.fillStyle='#8faabe';x.font='14px "Segoe UI",system-ui,sans-serif';x.textAlign='right';x.fillText('Wijken',bX-10,by+14);x.textAlign='left';x.fillText(`${wK}/${wT}`,bX+bW2+10,by+14);x.fillStyle='#1a2d42';rr(x,bX,by,bW2,bH,9);x.fill();if(wp>0){const gw=x.createLinearGradient(bX,0,bX+bW2*wp,0);gw.addColorStop(0,'#2563eb');gw.addColorStop(1,'#60a5fa');x.fillStyle=gw;rr(x,bX,by,Math.max(bH,bW2*wp),bH,9);x.fill();}const by2=by+34;x.fillStyle='#8faabe';x.font='14px "Segoe UI",system-ui,sans-serif';x.textAlign='right';x.fillText('Buurten',bX-10,by2+14);x.textAlign='left';x.fillText(`${bK}/${bT}`,bX+bW2+10,by2+14);x.fillStyle='#1a2d42';rr(x,bX,by2,bW2,bH,9);x.fill();if(bp>0){const gb=x.createLinearGradient(bX,0,bX+bW2*bp,0);gb.addColorStop(0,'#16a34a');gb.addColorStop(1,'#4ade80');x.fillStyle=gb;rr(x,bX,by2,Math.max(bH,bW2*bp),bH,9);x.fill();}x.textAlign='center';x.fillStyle='#d4e0ed';x.font='bold 17px "Segoe UI",system-ui,sans-serif';x.fillText(`Ken jij ${gn} beter?`,W/2,365);x.fillStyle='#4a6478';x.font='12px "Segoe UI",system-ui,sans-serif';x.fillText('buurt-quiz',W/2,400);return c;}
+function rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.lineTo(a+w-r,b);x.quadraticCurveTo(a+w,b,a+w,b+r);x.lineTo(a+w,b+h-r);x.quadraticCurveTo(a+w,b+h,a+w-r,b+h);x.lineTo(a+r,b+h);x.quadraticCurveTo(a,b+h,a,b+h-r);x.lineTo(a,b+r);x.quadraticCurveTo(a,b,a+r,b);x.closePath();}
+async function shareScore(){const c=createScoreImage(),gn=selectedGemeente?selectedGemeente.naam:'Quiz';try{const b=await new Promise(r=>c.toBlob(r,'image/png'));const f=new File([b],'buurt-quiz.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],title:`${gn} Quiz`,text:`Ken jij ${gn} beter?`});else if(navigator.share){const p=maxScore?Math.round(score/maxScore*100):0;await navigator.share({title:`${gn} Quiz`,text:`🏘️ ${gn} Quiz — ${getLevelLabel(currentLevelKey)}\nScore: ${score}/${maxScore} (${p}%)`});}else{const u=c.toDataURL('image/png'),a=document.createElement('a');a.href=u;a.download='buurt-quiz.png';a.click();showFeedback('correct','Opgeslagen!');}}catch(e){if(e.name!=='AbortError'){const u=c.toDataURL('image/png'),a=document.createElement('a');a.href=u;a.download='buurt-quiz.png';a.click();}}}
+
+// ========== MULTIPLAYER ==========
+function genRoomCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ';let s='';for(let i=0;i<4;i++)s+=c[Math.floor(Math.random()*c.length)];return s;}
+function hostGame(){if(!selectedGemeente||!wijkenData)return;const code=genRoomCode(),pid='buurtquiz-'+code;cleanupPeer();peer=new Peer(pid);isHost=true;document.getElementById('lobbyOverlay').style.display='flex';document.getElementById('startOverlay').style.display='none';document.getElementById('lobbyTitle').textContent='Maak battle';document.getElementById('lobbyContent').innerHTML=`<div class="room-code">${code}</div><div class="lobby-status">Wachten op tegenstander...</div><div style="font-size:12px;color:#aaa;margin-top:4px">Deel deze code</div>`;peer.on('connection',c=>{conn=c;setupConn();conn.on('open',()=>{sendMsg({type:'gemeente',code:selectedGemeente.code,naam:selectedGemeente.naam});document.getElementById('lobbyContent').innerHTML=`<div class="room-code">${code}</div><div class="lobby-status connected">Speler verbonden!</div><div style="margin-top:16px">${LEVEL_DEFS.filter(l=>l.key!=='training'&&!l.noGemeente).map(l=>`<button class="level-btn ${l.css}" onclick="startMultiplayerGame('${l.key}')" style="margin-bottom:6px">${l.label} <span class="level-desc">${l.desc}</span></button>`).join('')}</div>`;});});peer.on('error',e=>{console.error(e);if(e.type==='unavailable-id'){cleanupPeer();hostGame();}});}
+function showJoinUI(){document.getElementById('lobbyOverlay').style.display='flex';document.getElementById('startOverlay').style.display='none';document.getElementById('lobbyTitle').textContent='Doe mee';document.getElementById('lobbyContent').innerHTML=`<div style="margin:16px 0"><input type="text" class="join-input" id="joinCodeInput" maxlength="4" placeholder="CODE" autocomplete="off" /></div><div class="lobby-status" id="joinStatus">Voer de 4-letter code in</div><button class="mp-btn" onclick="joinGame()" style="margin-top:10px;max-width:200px">Verbinden</button>`;setTimeout(()=>document.getElementById('joinCodeInput').focus(),100);}
+function joinGame(){const inp=document.getElementById('joinCodeInput'),code=inp.value.toUpperCase().trim();if(code.length!==4){document.getElementById('joinStatus').textContent='Voer 4 letters in';return;}cleanupPeer();isHost=false;peer=new Peer();document.getElementById('joinStatus').textContent='Verbinden...';peer.on('open',()=>{conn=peer.connect('buurtquiz-'+code,{reliable:true});setupConn();conn.on('open',()=>{document.getElementById('joinStatus').textContent='Verbonden! Wachten op host...';document.getElementById('joinStatus').className='lobby-status connected';});});peer.on('error',e=>{document.getElementById('joinStatus').textContent='Kon niet verbinden.';document.getElementById('joinStatus').className='lobby-status error';});}
+function setupConn(){conn.on('data',handlePeerMsg);conn.on('close',()=>{if(gameActive){showFeedback('wrong','Verbinding verbroken');stopGame();}});}
+function sendMsg(m){if(conn&&conn.open)conn.send(m);}
+function handlePeerMsg(m){if(m.type==='gemeente')selectGemeente(m.code,m.naam).then(()=>{const st=document.getElementById('joinStatus');if(st){st.textContent=m.naam+' geladen. Wachten...';st.className='lobby-status connected';}});else if(m.type==='start'){isMultiplayer=true;prePickedTargets=m.targets;activeWijkCodes=m.activeWijkCodes||[];activeWijkName=m.activeWijkName||'';document.getElementById('lobbyOverlay').style.display='none';beginGame(m.levelKey,m.totalRounds);}else if(m.type==='score'){opponentScore=m.score;updateMpScores();}else if(m.type==='end'){opponentScore=m.score;}}
+function startMultiplayerGame(lk){if(!conn||!conn.open)return;isMultiplayer=true;const def=LEVEL_DEFS.find(l=>l.key===lk);currentLevelKey=lk;currentMode=lk;activeWijkCodes=[];activeWijkName='';if(lk==='cluster'&&clusterDef&&clusterDef.length){const sd=clusterDef[Math.floor(Math.random()*clusterDef.length)];activeWijkCodes=sd.wijkCodes;activeWijkName=sd.name;}let tr=calcRounds(lk);prePickedTargets=prePickTargets(lk,tr,activeWijkCodes);sendMsg({type:'start',levelKey:lk,totalRounds:tr,activeWijkCodes,activeWijkName,targets:prePickedTargets});document.getElementById('lobbyOverlay').style.display='none';beginGame(lk,tr);}
+function prePickTargets(mode,rounds,scope){const targets=[],used=[];for(let i=0;i<rounds;i++){let type,pool;if(mode==='wijken'||mode==='wijkbonus'){type='wijk';pool=wijkenData.features.filter(f=>f.properties.wijknaam&&(scope.length?scope.includes(f.properties.wijkcode):true)&&!used.includes(f.properties.wijkcode));if(!pool.length)pool=wijkenData.features.filter(f=>f.properties.wijknaam);}else if(mode==='buurten'){type='buurt';pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&!used.includes(f.properties.buurtcode));if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam);}else if(mode==='cluster'){type=i%2===0?'wijk':'buurt';if(type==='wijk'){pool=wijkenData.features.filter(f=>f.properties.wijknaam&&scope.includes(f.properties.wijkcode)&&!used.includes(f.properties.wijkcode));if(!pool.length)pool=wijkenData.features.filter(f=>f.properties.wijknaam&&scope.includes(f.properties.wijkcode));}else{pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f))&&!used.includes(f.properties.buurtcode));if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f)));}}else{type=i%2===0?'wijk':'buurt';if(type==='wijk'){pool=wijkenData.features.filter(f=>f.properties.wijknaam&&!used.includes(f.properties.wijkcode));if(!pool.length)pool=wijkenData.features.filter(f=>f.properties.wijknaam);}else{pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&!used.includes(f.properties.buurtcode));if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam);}}const feat=pool[Math.floor(Math.random()*pool.length)];const code=type==='wijk'?feat.properties.wijkcode:feat.properties.buurtcode;used.push(code);targets.push({code,type});}return targets;}
+function leaveLobby(){cleanupPeer();document.getElementById('lobbyOverlay').style.display='none';document.getElementById('startOverlay').style.display='flex';}
+function cleanupPeer(){if(conn)try{conn.close();}catch(e){}conn=null;if(peer)try{peer.destroy();}catch(e){}peer=null;isMultiplayer=false;isHost=false;}
+function updateMpScores(){document.getElementById('mpMe').textContent=score;document.getElementById('mpOpp').textContent=opponentScore;}
+
+// ========== LEVEL CLICK / PICKERS ==========
+function onLevelClick(key){
+    if(key==='gemeenten'){startGemeenteGame();return;}
+    if(!selectedGemeente||!wijkenData)return;
+    if(key==='training'){showWijkPicker();return;}
+    if(key==='cluster'){showClusterPicker();return;}
+    startGame(key);
+}
+
+function showWijkPicker(){
+    const wijks=wijkenData.features.filter(f=>f.properties.wijknaam).sort((a,b)=>a.properties.wijknaam.localeCompare(b.properties.wijknaam));
+    document.getElementById('pickerCard').innerHTML=`<h2>Kies een wijk</h2><p class="subtitle">Oefen de buurten in deze wijk</p><div class="pick-grid">${wijks.map(w=>`<button class="pick-btn" onclick="startTraining('${w.properties.wijkcode}')">${w.properties.wijknaam} <span style="color:#aaa;font-size:12px;font-weight:400">(${(wijkBuurten[w.properties.wijkcode]||[]).filter(b=>b.properties.buurtnaam).length} buurten)</span></button>`).join('')}</div><button class="end-btn secondary" onclick="closePicker()" style="margin-top:14px">Annuleren</button>`;
+    document.getElementById('pickerOverlay').style.display='flex';document.getElementById('startOverlay').style.display='none';
+}
+
+function showClusterPicker(){
+    if(!clusterDef||!clusterDef.length)return;
+    document.getElementById('pickerCard').innerHTML=`<h2>Kies een cluster</h2><p class="subtitle">Wijken & buurten in dit gebied</p><div class="pick-grid">${clusterDef.map((sd,i)=>{const bCount=sd.wijkCodes.reduce((n,wc)=>(wijkBuurten[wc]||[]).filter(b=>b.properties.buurtnaam).length+n,0);return `<button class="pick-btn" onclick="startCluster(${i})">${sd.name} <span style="color:#aaa;font-size:12px;font-weight:400">(${sd.wijkCodes.length} wijken, ${bCount} buurten)</span></button>`;}).join('')}</div><button class="end-btn secondary" onclick="closePicker()" style="margin-top:14px">Annuleren</button>`;
+    document.getElementById('pickerOverlay').style.display='flex';document.getElementById('startOverlay').style.display='none';
+}
+function closePicker(){document.getElementById('pickerOverlay').style.display='none';document.getElementById('startOverlay').style.display='flex';}
+
+function startTraining(wijkCode){
+    document.getElementById('pickerOverlay').style.display='none';
+    currentLevelKey='training';currentMode='training';
+    trainingMode=true;trainingCorrect=0;trainingTotal=0;
+    activeWijkCodes=[wijkCode];activeWijkName=wijkNameMap[wijkCode]||'';
+    const pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&findWijkCodeForBuurt(f)===wijkCode);
+    totalRounds=pool.length;currentRound=0;score=0;maxScore=0;
+    usedCodes=[];streak=0;roundHistory=[];retryQueue=[];bonusPhase=false;bonusQueue=[];
+    gameActive=true;isMultiplayer=false;prePickedTargets=[];
+    document.getElementById('startOverlay').style.display='none';document.getElementById('endOverlay').style.display='none';
+    document.getElementById('hud').style.display='block';document.getElementById('mpScores').style.display='none';
+    document.getElementById('countdown').style.display='none';
+    document.getElementById('scoreTotal').textContent='';
+    const sl=document.getElementById('scopeLabel');sl.textContent=`Wijk: ${activeWijkName}`;sl.style.display='block';
+    updateStreak();applyMapMode();nextRound();
+}
+
+function startCluster(idx){
+    document.getElementById('pickerOverlay').style.display='none';
+    const sd=clusterDef[idx];
+    activeWijkCodes=sd.wijkCodes;activeWijkName=sd.name;
+    startGame('cluster');
+}
+
+// ========== GAME FLOW ==========
+function calcRounds(lk){
+    if(lk==='wijken'||lk==='wijkbonus')return Math.min(wijkenData.features.filter(f=>f.properties.wijknaam&&(activeWijkCodes.length?activeWijkCodes.includes(f.properties.wijkcode):true)).length,MAX_ROUNDS);
+    if(lk==='cluster')return Math.min(activeWijkCodes.reduce((n,wc)=>(wijkBuurten[wc]||[]).filter(b=>b.properties.buurtnaam).length+n,0)+activeWijkCodes.length,MAX_ROUNDS);
+    if(lk==='buurten')return MAX_ROUNDS;
+    return MAX_ROUNDS;
+}
+
+function fitBounds(scope){
+    if(!buurtenLayer)return;let bounds;
+    if(scope&&scope.length){const g=L.featureGroup();buurtenLayer.eachLayer(l=>{if(scope.includes(findWijkCodeForBuurt(l.feature)))g.addLayer(l);});if(g.getLayers().length)bounds=g.getBounds();}
+    if(!bounds)bounds=buurtenLayer.getBounds();const hud=document.getElementById('hud'),hH=hud.style.display!=='none'?(hud.offsetHeight||100):0;map.fitBounds(bounds,{paddingTopLeft:[10,hH+20],paddingBottomRight:[10,10]});
+}
+
+// ========== GEMEENTE LEVEL ==========
+async function loadGemeenteGeo(){
+    if(gemeenteGeoData)return;
+    const ld=document.getElementById('loading');ld.querySelector('.loading-text').textContent='Gemeenten laden...';ld.style.display='flex';
+    try{const p=new URLSearchParams({service:'WFS',version:'2.0.0',request:'GetFeature',typeName:'wijkenbuurten:gemeenten',outputFormat:'json',srsName:'EPSG:4326'});
+    gemeenteGeoData=await(await fetch(`${WFS_BASE}?${p}`)).json();
+    }catch(e){console.error(e);showFeedback('wrong','Laden mislukt');}
+    ld.style.display='none';
+}
+function shuffleGemeenteColors(){
+    const sg=shuffleArray(wijkColors.concat(buurtPalette));
+    gemeenteGeoData.features.forEach((f,i)=>{gemeenteColorMap[f.properties.gemeentecode]=sg[i%sg.length];});
+}
+function createGemeenteLayer(){
+    if(gemeenteLayer){map.removeLayer(gemeenteLayer);gemeenteLayer=null;}
+    gemeenteLayers={};
+    gemeenteLayer=L.geoJSON(gemeenteGeoData,{style:f=>({fillColor:gemeenteColorMap[f.properties.gemeentecode]||'#999',weight:1.5,opacity:0.5,color:'#666',fillOpacity:0.15}),onEachFeature:(f,l)=>{gemeenteLayers[f.properties.gemeentecode]=l;l.on('click',()=>handleGemeenteGuess(f));}}).addTo(map);
+}
+function removeGemeenteLayer(){if(gemeenteLayer){map.removeLayer(gemeenteLayer);gemeenteLayer=null;gemeenteLayers={};}}
+function fitGemeenteBounds(){if(gemeenteLayer)map.fitBounds(gemeenteLayer.getBounds(),{paddingTopLeft:[10,120],paddingBottomRight:[10,10]});}
+
+async function startGemeenteGame(){
+    await loadGemeenteGeo();
+    if(!gemeenteGeoData)return;
+    // Hide wijk/buurt layers if present
+    if(buurtenLayer)map.removeLayer(buurtenLayer);if(wijkenLayer)map.removeLayer(wijkenLayer);
+    currentLevelKey='gemeenten';currentMode='gemeenten';
+    trainingMode=false;bonusPhase=false;bonusQueue=[];
+    isMultiplayer=false;prePickedTargets=[];
+    activeWijkCodes=[];activeWijkName='';
+    totalRounds=MAX_ROUNDS;currentRound=0;score=0;maxScore=0;
+    usedCodes=[];streak=0;roundHistory=[];retryQueue=[];
+    gameActive=true;
+    shuffleGemeenteColors();createGemeenteLayer();
+    document.getElementById('startOverlay').style.display='none';document.getElementById('endOverlay').style.display='none';
+    document.getElementById('hud').style.display='block';document.getElementById('countdown').style.display='';
+    document.getElementById('mpScores').style.display='none';
+    document.getElementById('scopeLabel').style.display='none';
+    updateTotalScore();updateStreak();
+    nextGemeenteRound();
+}
+
+function nextGemeenteRound(){
+    currentRound++;if(currentRound>totalRounds){endGemeenteGame();return;}
+    roundLocked=false;roundPoints=ROUND_TIME;
+    shuffleGemeenteColors();
+    gemeenteLayer.eachLayer(l=>{l.setStyle({fillColor:gemeenteColorMap[l.feature.properties.gemeentecode]||'#999',weight:1.5,opacity:0.5,color:'#666',fillOpacity:0.15});});
+    fitGemeenteBounds();
+    // Pick target
+    let pool=gemeenteGeoData.features.filter(f=>f.properties.gemeentenaam&&!usedCodes.includes(f.properties.gemeentecode));
+    if(!pool.length)pool=gemeenteGeoData.features.filter(f=>f.properties.gemeentenaam);
+    targetFeature=pool[Math.floor(Math.random()*pool.length)];targetType='gemeente';
+    usedCodes.push(targetFeature.properties.gemeentecode);
+    maxScore+=ROUND_TIME;
+    document.getElementById('questionText').textContent=targetFeature.properties.gemeentenaam;
+    document.getElementById('roundBadge').textContent=`${currentRound}/${totalRounds}`;
+    roundStartTime=performance.now();startCountdown();
+}
+
+function handleGemeenteGuess(cf){
+    if(!gameActive||!targetFeature||roundLocked||currentMode!=='gemeenten')return;
+    const cc=cf.properties.gemeentecode,tc=targetFeature.properties.gemeentecode;
+    const cl=gemeenteLayers[cc];
+    if(cc===tc){
+        roundLocked=true;stopTimer();const pts=getCurrentPoints();score+=pts;streak++;
+        roundHistory.push({code:tc,type:'gemeente',result:'perfect',points:pts});
+        if(cl)cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});
+        updateCountdownDisplay(pts);updateTotalScore();updateStreak();
+        showFeedback('correct','Goed!',pts);
+        setTimeout(nextGemeenteRound,1000);
+    }else{
+        applyPenalty();
+        if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.3,weight:1.5,color:'#991b1b'});
+        showFeedback('wrong',`-${MISCLICK_PENALTY}s`);
+        if(getCurrentPoints()<=0){
+            roundLocked=true;stopTimer();streak=0;
+            roundHistory.push({code:tc,type:'gemeente',result:'fail',points:0});
+            const tl=gemeenteLayers[tc];if(tl)tl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});
+            updateCountdownDisplay(0);updateTotalScore();updateStreak();
+            setTimeout(nextGemeenteRound,2000);
+        }
+    }
+}
+
+function handleGemeenteTimeout(){
+    if(!gameActive||!targetFeature||roundLocked)return;
+    roundLocked=true;streak=0;const tc=targetFeature.properties.gemeentecode;
+    roundHistory.push({code:tc,type:'gemeente',result:'fail',points:0});
+    const tl=gemeenteLayers[tc];if(tl)tl.setStyle({fillColor:'#f59e0b',fillOpacity:0.5,weight:3,color:'#92400e'});
+    showFeedback('timeout','Te laat!');updateCountdownDisplay(0);updateTotalScore();updateStreak();
+    setTimeout(nextGemeenteRound,2000);
+}
+
+function endGemeenteGame(){
+    gameActive=false;targetFeature=null;roundLocked=true;stopTimer();
+    document.getElementById('hud').style.display='none';
+    // Mastery for gemeenten
+    const m=getMastery();roundHistory.forEach(h=>{if(h.result==='perfect')m[h.code]=(m[h.code]||0)+1;});saveMastery(m);
+    const pct=maxScore?Math.round(score/maxScore*100):0;
+    const es=document.getElementById('endScore');es.textContent=`${score} / ${maxScore}`;
+    es.className='end-score '+(pct>=70?'great':pct>=40?'ok':'poor');
+    let msg;if(pct>=90)msg='Topograaf! Je kent heel Nederland!';else if(pct>=70)msg='Goed gedaan!';else if(pct>=40)msg='Niet slecht, blijf oefenen.';else msg='Nederland is groot, blijf oefenen!';
+    document.getElementById('endDetail').textContent=msg;
+    document.getElementById('mpResult').style.display='none';
+    const isNew=saveHighscore('gemeenten',score);const hs=document.getElementById('endHighscore');hs.className='end-highscore'+(isNew?' new':'');hs.textContent=isNew?'Nieuw record!':'';
+    document.getElementById('endMastery').innerHTML='';
+    document.getElementById('endOverlay').style.display='flex';
+}
+
+function showStart(){cleanupPeer();bonusPhase=false;trainingMode=false;removeGemeenteLayer();['startOverlay'].forEach(id=>document.getElementById(id).style.display='flex');['endOverlay','hud','heatmapBar','lobbyOverlay','pickerOverlay'].forEach(id=>document.getElementById(id).style.display='none');document.getElementById('countdown').style.display='';map.closePopup();activeWijkCodes=[];currentMode=null;if(wijkenData&&buurtenData){if(!map.hasLayer(buurtenLayer))buurtenLayer.addTo(map);if(!map.hasLayer(wijkenLayer))wijkenLayer.addTo(map);resetMapStyles();fitBounds();}renderHighscores();renderMastery();}
+
+function startGame(levelKey){
+    if(!selectedGemeente||!wijkenData)return;
+    isMultiplayer=false;prePickedTargets=[];trainingMode=false;bonusPhase=false;bonusQueue=[];
+    currentLevelKey=levelKey;currentMode=levelKey;
+    if(levelKey!=='cluster'){activeWijkCodes=[];activeWijkName='';}
+    totalRounds=calcRounds(levelKey);
+    beginGame(levelKey,totalRounds);
+}
+
+function beginGame(levelKey,rounds){
+    currentLevelKey=levelKey;totalRounds=rounds;
+    currentRound=0;score=0;maxScore=0;opponentScore=0;
+    usedCodes=[];streak=0;roundHistory=[];retryQueue=[];bonusPhase=false;bonusQueue=[];
+    gameActive=true;
+    document.getElementById('startOverlay').style.display='none';document.getElementById('endOverlay').style.display='none';
+    document.getElementById('lobbyOverlay').style.display='none';document.getElementById('pickerOverlay').style.display='none';
+    document.getElementById('hud').style.display='block';document.getElementById('countdown').style.display='';
+    document.getElementById('mpScores').style.display=isMultiplayer?'flex':'none';
+    updateTotalScore();updateStreak();updateMpScores();
+    const sl=document.getElementById('scopeLabel');
+    if(activeWijkCodes.length&&activeWijkName){sl.textContent=(currentLevelKey==='cluster'?'Cluster: ':'Wijk: ')+activeWijkName;sl.style.display='block';}else sl.style.display='none';
+    applyMapMode();nextRound();
+}
+
+function pickTarget(){
+    if(isMultiplayer&&prePickedTargets.length){const t=prePickedTargets[currentRound-1];if(!t)return null;let f;if(t.type==='wijk')f=wijkenData.features.find(x=>x.properties.wijkcode===t.code);else f=buurtenData.features.find(x=>x.properties.buurtcode===t.code);return f?{feature:f,type:t.type}:null;}
+    if(!trainingMode&&retryQueue.length>0&&Math.random()<0.5)return retryQueue.shift();
+    let type,pool;const scope=activeWijkCodes;
+    if(currentMode==='wijken'||currentMode==='wijkbonus'){type='wijk';pool=wijkenData.features.filter(f=>f.properties.wijknaam&&(scope.length?scope.includes(f.properties.wijkcode):true)&&!usedCodes.includes(f.properties.wijkcode));if(!pool.length)pool=wijkenData.features.filter(f=>f.properties.wijknaam);}
+    else if(currentMode==='training'){type='buurt';pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f))&&!usedCodes.includes(f.properties.buurtcode));if(!pool.length)return null;}
+    else if(currentMode==='buurten'){type='buurt';pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&!usedCodes.includes(f.properties.buurtcode));if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam);}
+    else if(currentMode==='cluster'){type=currentRound%2===1?'wijk':'buurt';if(type==='wijk'){pool=wijkenData.features.filter(f=>f.properties.wijknaam&&scope.includes(f.properties.wijkcode)&&!usedCodes.includes(f.properties.wijkcode));if(!pool.length){type='buurt';pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f))&&!usedCodes.includes(f.properties.buurtcode));}}else{pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f))&&!usedCodes.includes(f.properties.buurtcode));}if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f)));}
+    else{type=currentRound%2===1?'wijk':'buurt';if(type==='wijk'){pool=wijkenData.features.filter(f=>f.properties.wijknaam&&!usedCodes.includes(f.properties.wijkcode));if(!pool.length)pool=wijkenData.features.filter(f=>f.properties.wijknaam);}else{pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&!usedCodes.includes(f.properties.buurtcode));if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam);}}
+    if(!pool||!pool.length)return null;
+    const feat=pool[Math.floor(Math.random()*pool.length)];usedCodes.push(type==='wijk'?feat.properties.wijkcode:feat.properties.buurtcode);return{feature:feat,type};
+}
+
+function nextRound(){
+    if(bonusPhase){nextBonusRound();return;}
+    currentRound++;if(currentRound>totalRounds){endGame();return;}
+    roundLocked=false;roundPoints=trainingMode?0:ROUND_TIME;
+    shuffleColors();resetMapStyles();applyMapMode();fitBounds(activeWijkCodes.length?activeWijkCodes:null);
+    const pick=pickTarget();if(!pick){endGame();return;}targetFeature=pick.feature;targetType=pick.type;
+    if(!trainingMode)maxScore+=ROUND_TIME;
+    const name=targetType==='wijk'?targetFeature.properties.wijknaam:targetFeature.properties.buurtnaam;
+    let qText='';
+    if(trainingMode)qText=`<span class="training-tag">Oefenen</span><br>${name}`;
+    else{qText=name;if(targetType==='buurt'&&(currentMode==='buurten'||currentMode==='cluster')){const wn=findWijkForBuurt(targetFeature);if(wn)qText+=`<br><span style="font-size:14px;font-weight:400;color:#777">${wn}</span>`;}}
+    document.getElementById('questionText').innerHTML=qText;
+    document.getElementById('roundBadge').textContent=trainingMode?`${currentRound}/${totalRounds}`:`${currentRound}/${totalRounds}`;
+    if(!trainingMode){roundStartTime=performance.now();startCountdown();}
+}
+
+// ===== BONUS PHASE (Level 2) =====
+function enterBonusPhase(wijkCode){
+    bonusPhase=true;
+    const pool=(wijkBuurten[wijkCode]||[]).filter(f=>f.properties.buurtnaam);
+    bonusQueue=shuffleArray(pool).slice(0,3);
+    // Zoom into wijk, show buurten
+    activeWijkCodes=[wijkCode];
+    resetMapStyles();applyMapMode();fitBounds([wijkCode]);
+    nextBonusRound();
+}
+function nextBonusRound(){
+    if(bonusQueue.length===0){bonusPhase=false;activeWijkCodes=[];nextRound();return;}
+    roundLocked=false;
+    const feat=bonusQueue.shift();targetFeature=feat;targetType='buurt';
+    document.getElementById('questionText').innerHTML=`<span class="bonus-tag">BONUS +3</span><br>${feat.properties.buurtnaam}`;
+    roundStartTime=performance.now();
+    startCountdown(BONUS_TIME);
+}
+
+// ===== COUNTDOWN =====
+function startCountdown(time){
+    const T=time||ROUND_TIME;updateCountdownDisplay(T);
+    function tick(){const el=(performance.now()-roundStartTime)/1000,rem=Math.max(0,T-el);roundPoints=Math.max(0,Math.ceil(rem));updateCountdownDisplay(roundPoints);if(rem<=0){if(bonusPhase)bonusTimeout();else handleTimeout();return;}animFrame=requestAnimationFrame(tick);}animFrame=requestAnimationFrame(tick);
+}
+function updateCountdownDisplay(v){const e=document.getElementById('countdown');e.textContent=v;e.className=v<=0?'countdown zero':v<=4?'countdown low':v<=8?'countdown mid':'countdown high';}
+function applyPenalty(){roundStartTime-=MISCLICK_PENALTY*1000;}
+function stopTimer(){if(animFrame)cancelAnimationFrame(animFrame);animFrame=null;}
+
+function skipRound(){if(!gameActive||!targetFeature||roundLocked)return;if(trainingMode){showCorrectAndAdvance();return;}roundLocked=true;stopTimer();streak=0;const tc=getTargetCode();roundHistory.push({code:tc,type:targetType,result:'fail',points:0});if(!isMultiplayer&&!bonusPhase)retryQueue.push({feature:targetFeature,type:targetType});showAnswer(tc,'#f59e0b','#92400e');showFeedback('timeout','Overgeslagen');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(()=>{if(bonusPhase)nextBonusRound();else nextRound();},1500);}
+function stopGame(){if(!gameActive)return;stopTimer();endGame();}
+
+// ===== GUESS HANDLING =====
+function handleGuess(cf){
+    if(!gameActive||!targetFeature||roundLocked)return;
+
+    // TRAINING MODE
+    if(trainingMode){
+        trainingTotal++;
+        const cc=cf.properties.buurtcode,tc=targetFeature.properties.buurtcode;
+        const cl=buurtLayers[cc],tl=buurtLayers[tc];
+        roundLocked=true;
+        if(cc===tc){trainingCorrect++;if(cl)cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});showFeedback('correct','Goed!');setTimeout(nextRound,1000);}
+        else{if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.4,weight:2,color:'#991b1b'});if(tl){tl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});tl.bringToFront();}wijkenLayer.eachLayer(l=>l.bringToFront());showFeedback('wrong',targetFeature.properties.buurtnaam);setTimeout(nextRound,2500);}
+        return;
+    }
+
+    const tc=getTargetCode();
+
+    // BONUS PHASE
+    if(bonusPhase){
+        const cc=cf.properties.buurtcode,cl=buurtLayers[cc];
+        if(cc===tc){roundLocked=true;stopTimer();score+=3;roundHistory.push({code:tc,type:'buurt',result:'perfect',points:3});if(cl)cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});updateTotalScore();showFeedback('correct','Bonus!',3);if(isMultiplayer)sendMsg({type:'score',score});setTimeout(()=>nextBonusRound(),800);}
+        else{if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.3,weight:1,color:'#991b1b'});showFeedback('wrong','Mis');}
+        return;
+    }
+
+    // NORMAL: wijk target
+    if(targetType==='wijk'){
+        const cwc=findWijkCodeForBuurt(cf);
+        if(cwc===tc){roundLocked=true;stopTimer();const pts=getCurrentPoints();score+=pts;streak++;roundHistory.push({code:tc,type:'wijk',result:'perfect',points:pts});highlightWijk(tc,'#22c55e','#166534');updateCountdownDisplay(pts);updateTotalScore();updateStreak();showFeedback('correct','Goed!',pts);if(isMultiplayer)sendMsg({type:'score',score});
+            if(currentMode==='wijkbonus'){setTimeout(()=>enterBonusPhase(tc),1000);}else{setTimeout(nextRound,1000);}
+        }else{applyPenalty();highlightWijk(cwc,'#ef4444','#991b1b');showFeedback('wrong',`-${MISCLICK_PENALTY}s`);if(getCurrentPoints()<=0){roundLocked=true;stopTimer();streak=0;roundHistory.push({code:tc,type:'wijk',result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:'wijk'});highlightWijk(tc,'#22c55e','#166534');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}}
+    }
+    // NORMAL: buurt target
+    else{
+        const cc=cf.properties.buurtcode,cl=buurtLayers[cc];
+        if(cc===tc){roundLocked=true;stopTimer();const pts=getCurrentPoints();score+=pts;streak++;roundHistory.push({code:tc,type:'buurt',result:'perfect',points:pts});cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});updateCountdownDisplay(pts);updateTotalScore();updateStreak();showFeedback('correct','Goed!',pts);if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,1000);}
+        else{applyPenalty();if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.4,weight:2,color:'#991b1b'});showFeedback('wrong',`-${MISCLICK_PENALTY}s`);if(getCurrentPoints()<=0){roundLocked=true;stopTimer();streak=0;roundHistory.push({code:tc,type:'buurt',result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:'buurt'});const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});tl.bringToFront();wijkenLayer.eachLayer(l=>l.bringToFront());}updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}}
+    }
+}
+
+function showCorrectAndAdvance(){roundLocked=true;const tc=getTargetCode();const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:'#f59e0b',fillOpacity:0.5,weight:3,color:'#92400e'});tl.bringToFront();wijkenLayer.eachLayer(l=>l.bringToFront());}showFeedback('timeout','Overgeslagen');setTimeout(nextRound,1500);}
+
+function getCurrentPoints(){return Math.max(0,Math.ceil((bonusPhase?BONUS_TIME:ROUND_TIME)-(performance.now()-roundStartTime)/1000));}
+function getTargetCode(){return targetType==='wijk'?targetFeature.properties.wijkcode:targetFeature.properties.buurtcode;}
+
+function highlightWijk(wc,fc,bc){buurtenLayer.eachLayer(l=>{if(findWijkCodeForBuurt(l.feature)===wc)l.setStyle({fillColor:fc,fillOpacity:0.45,weight:0,color:'transparent'});});const wl=wijkLayers[wc];if(wl){wl.setStyle({weight:4,opacity:1,color:bc});wl.bringToFront();}}
+function showAnswer(tc,fc,bc){if(targetType==='wijk')highlightWijk(tc,fc,bc);else{const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:fc,fillOpacity:0.5,weight:3,color:bc});tl.bringToFront();wijkenLayer.eachLayer(l=>l.bringToFront());}}}
+
+function handleTimeout(){if(currentMode==='gemeenten'){handleGemeenteTimeout();return;}if(!gameActive||!targetFeature||roundLocked)return;roundLocked=true;streak=0;const tc=getTargetCode();roundHistory.push({code:tc,type:targetType,result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:targetType});showAnswer(tc,'#f59e0b','#92400e');showFeedback('timeout','Te laat!');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}
+function bonusTimeout(){if(!gameActive||!targetFeature||roundLocked)return;roundLocked=true;const tc=getTargetCode();const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:'#f59e0b',fillOpacity:0.5,weight:2,color:'#92400e'});tl.bringToFront();}showFeedback('timeout','Te laat');updateCountdownDisplay(0);setTimeout(()=>nextBonusRound(),1200);}
+
+function endGame(){
+    gameActive=false;targetFeature=null;roundLocked=true;stopTimer();bonusPhase=false;
+    document.getElementById('hud').style.display='none';document.getElementById('countdown').style.display='';
+    if(!trainingMode)updateMastery();
+    if(isMultiplayer)sendMsg({type:'end',score});
+
+    if(trainingMode){
+        // Training end screen
+        const es=document.getElementById('endScore');es.textContent=`${trainingCorrect} / ${trainingTotal}`;
+        es.className='end-score '+(trainingTotal>0&&trainingCorrect/trainingTotal>=0.7?'great':trainingCorrect/trainingTotal>=0.4?'ok':'poor');
+        document.getElementById('endDetail').textContent=trainingCorrect===trainingTotal?'Perfect! Je kent alle buurten.':trainingCorrect>trainingTotal/2?'Goed bezig, blijf oefenen!':'Probeer het nog eens!';
+        document.getElementById('endHighscore').className='end-highscore';document.getElementById('endHighscore').textContent='';
+        document.getElementById('mpResult').style.display='none';
+        renderEndMastery();document.getElementById('endOverlay').style.display='flex';
+        trainingMode=false;return;
+    }
+
+    const pct=maxScore?Math.round(score/maxScore*100):0;
+    const es=document.getElementById('endScore');es.textContent=`${score} / ${maxScore}`;
+    es.className='end-score '+(pct>=70?'great':pct>=40?'ok':'poor');
+    let msg;if(pct>=90)msg='Uitstekend! Je kent het als je broekzak!';else if(pct>=70)msg='Goed gedaan! Snel en trefzeker.';else if(pct>=40)msg='Niet slecht, er is ruimte voor verbetering.';else msg='Blijf oefenen!';
+    document.getElementById('endDetail').textContent=msg;
+
+    const mpRes=document.getElementById('mpResult');
+    if(isMultiplayer){mpRes.style.display='block';document.getElementById('mpVs').textContent=`Jij: ${score} — Tegenstander: ${opponentScore}`;document.getElementById('mpWinner').textContent=score>opponentScore?'🏆 Je hebt gewonnen!':score<opponentScore?'Tegenstander wint!':'Gelijkspel!';}else mpRes.style.display='none';
+
+    const isNew=saveHighscore(currentLevelKey,score);const hs=document.getElementById('endHighscore');hs.className='end-highscore'+(isNew?' new':'');hs.textContent=isNew?'Nieuw record!':'';
+    renderEndMastery();document.getElementById('endOverlay').style.display='flex';
+}
+
+// Heatmap
+function showHeatmap(){document.getElementById('endOverlay').style.display='none';
+    if(currentLevelKey==='gemeenten'&&gemeenteLayer){
+        gemeenteLayer.eachLayer(l=>{l.setStyle({fillColor:'#e5e7eb',fillOpacity:0.15,weight:0.5,color:'#ccc',opacity:0.4});});
+        roundHistory.forEach(h=>{const c=heatColors[h.result]||heatColors.fail;const gl=gemeenteLayers[h.code];if(gl){gl.setStyle({fillColor:c,fillOpacity:0.5,weight:2,color:c});gl.bringToFront();}});
+        fitGemeenteBounds();
+    }else{
+        resetMapStyles();if(buurtenLayer)buurtenLayer.eachLayer(l=>{l.setStyle({fillColor:'#e5e7eb',fillOpacity:0.15,weight:0.5,color:'#ccc',opacity:0.4});});if(wijkenLayer)wijkenLayer.eachLayer(l=>{l.setStyle({weight:2,opacity:0.3,color:'#aaa'});});roundHistory.forEach(h=>{const c=heatColors[h.result]||heatColors.fail;if(h.type==='wijk'){if(buurtenLayer)buurtenLayer.eachLayer(l=>{if(findWijkCodeForBuurt(l.feature)===h.code)l.setStyle({fillColor:c,fillOpacity:0.5,weight:0,color:'transparent'});});const wl=wijkLayers[h.code];if(wl){wl.setStyle({weight:3,opacity:0.9,color:c});wl.bringToFront();}}else{const bl=buurtLayers[h.code];if(bl){bl.setStyle({fillColor:c,fillOpacity:0.5,weight:2,color:c});bl.bringToFront();}}});if(wijkenLayer)wijkenLayer.eachLayer(l=>l.bringToFront());fitBounds(activeWijkCodes.length?activeWijkCodes:null);
+    }
+    document.getElementById('heatmapBar').style.display='block';}
+
+// Feedback & UI
+function showFeedback(type,text,pts){const e=document.getElementById('feedback');let h=text;if(pts)h+=`<span class="pts">+${pts} punt${pts!==1?'en':''}</span>`;e.innerHTML=h;e.className=`feedback ${type} show`;setTimeout(()=>{e.className='feedback';},type==='correct'?800:1200);}
+function updateTotalScore(){document.getElementById('scoreTotal').textContent=trainingMode?`${trainingCorrect}✓`:score;if(isMultiplayer)updateMpScores();}
+function updateStreak(){const e=document.getElementById('streakBadge');if(streak>=STREAK_THRESHOLD){e.textContent=`🔥 ${streak}x`;e.className='streak-badge active';}else e.className='streak-badge';}
+
+function resetMapStyles(){if(buurtenLayer)buurtenLayer.eachLayer(l=>{l.setStyle({fillColor:buurtColorMap[l.feature.properties.buurtcode]||'#999',weight:1,opacity:0.6,color:'#999',fillOpacity:0.12});});if(wijkenLayer)wijkenLayer.eachLayer(l=>{l.setStyle({fillColor:'transparent',fillOpacity:0,weight:3.5,opacity:0.6,color:wijkColorMap[l.feature.properties.wijkcode]||'#333'});});}
+
+function applyMapMode(){
+    const m=currentMode;
+    if(m==='wijken'||m==='wijkbonus'&&!bonusPhase){buurtenLayer.eachLayer(l=>{const wc=findWijkCodeForBuurt(l.feature);l.setStyle({fillColor:wijkColorMap[wc]||'#999',fillOpacity:0.15,weight:0,opacity:0,color:'transparent'});});wijkenLayer.eachLayer(l=>{l.setStyle({weight:3.5,opacity:0.8,color:wijkColorMap[l.feature.properties.wijkcode]||'#333'});l.bringToFront();});}
+    else if(m==='training'||(m==='wijkbonus'&&bonusPhase)||m==='cluster'){
+        buurtenLayer.eachLayer(l=>{const wc=findWijkCodeForBuurt(l.feature);if(activeWijkCodes.includes(wc))l.setStyle({fillColor:buurtColorMap[l.feature.properties.buurtcode]||'#999',weight:1,opacity:0.6,color:'#999',fillOpacity:0.15});else l.setStyle({fillColor:'#e5e7eb',fillOpacity:0.06,weight:0.5,opacity:0.2,color:'#ccc'});});
+        wijkenLayer.eachLayer(l=>{const wc=l.feature.properties.wijkcode;l.setStyle(activeWijkCodes.includes(wc)?{weight:3.5,opacity:0.8,color:wijkColorMap[wc]||'#333'}:{weight:1,opacity:0.15,color:'#bbb'});l.bringToFront();});
+    }else{resetMapStyles();wijkenLayer.eachLayer(l=>{l.setStyle({weight:3.5,opacity:0.6,color:wijkColorMap[l.feature.properties.wijkcode]||'#333'});l.bringToFront();});}
+}
+
+// Gemeente selector toggle
+let gemeenteListLoaded=false;
+async function showGemeenteSelector(){
+    gemInput.readOnly=false;
+    if(!gemeenteListLoaded){
+        const ld=document.getElementById('loading');ld.querySelector('.loading-text').textContent='Gemeenten laden...';ld.style.display='flex';
+        await loadGemeenteList();
+        gemeenteListLoaded=true;
+    }
+    gemInput.focus();
+}
+
+// Init
+const autoGemeente=/haarlem/i.test(window.location.pathname)?{code:'GM0392',naam:'Haarlem'}:null;
+if(autoGemeente){
+    renderLevelButtons();
+    document.getElementById('loading').querySelector('.loading-text').textContent='Haarlem laden...';
+    selectGemeente(autoGemeente.code,autoGemeente.naam);
+} else {
+    loadGemeenteList().then(()=>{gemeenteListLoaded=true;});
+}
+</script>
+</body>
+</html>
