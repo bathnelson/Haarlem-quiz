@@ -43,6 +43,7 @@
         .level-btn.l3{border-color:#fde68a;color:#92400e}.level-btn.l3:hover{background:#fffbeb}
         .level-btn.l4{border-color:#fdba74;color:#9a3412}.level-btn.l4:hover{background:#fff7ed}
         .level-btn.l5{border-color:#fca5a5;color:#991b1b}.level-btn.l5:hover{background:#fef2f2}
+        .level-btn.weak{border-color:#f9a8d4;color:#9d174d;background:#fdf2f8}.level-btn.weak:hover{background:#fce7f3}
         .mp-section{margin-bottom:18px;padding-top:14px;border-top:1px solid #eee}
         .mp-section-title{font-size:12px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
         .mp-btns{display:flex;gap:10px}
@@ -129,6 +130,7 @@
     <div class="mastery-section" id="masterySection"></div>
     <div class="highscore-row" id="highscoreRow"></div>
     <div id="levelButtons"></div>
+    <div id="weakButton"></div>
     <div class="mp-section"><div class="mp-section-title">Multiplayer</div><div class="mp-btns"><button class="mp-btn" id="mpHostBtn" onclick="hostGame()" disabled>Start Battle</button><button class="mp-btn" id="mpJoinBtn" onclick="showJoinUI()" disabled>Doe mee</button></div></div>
 </div></div>
 
@@ -276,8 +278,25 @@ function getMasteryKey(){return `quiz-mastery-${selectedGemeente?selectedGemeent
 function getMastery(){try{return JSON.parse(localStorage.getItem(getMasteryKey())||'{}');}catch(e){return {};}}
 function saveMastery(d){localStorage.setItem(getMasteryKey(),JSON.stringify(d));}
 function updateMastery(){const m=getMastery();roundHistory.forEach(h=>{if(h.result==='perfect')m[h.code]=(m[h.code]||0)+1;});saveMastery(m);}
+// Slim oefenen: per wijk/buurt bijhouden hoe vaak je hem mist
+const WEAK_MAX=6;
+function getWeakKey(){return `quiz-weak-${selectedGemeente?selectedGemeente.code:''}`;}
+function getWeak(){try{return JSON.parse(localStorage.getItem(getWeakKey())||'{}');}catch(e){return {};}}
+function bumpWeak(code,d){if(!code)return;const w=getWeak(),v=Math.max(0,Math.min(WEAK_MAX,(w[code]||0)+d));if(v)w[code]=v;else delete w[code];try{localStorage.setItem(getWeakKey(),JSON.stringify(w));}catch(e){}}
+function featCode(f){return f.properties.buurtcode||f.properties.wijkcode;}
+function getWeakFeatures(){const w=getWeak();if(!wijkenData||!buurtenData)return[];return[...wijkenData.features.filter(f=>f.properties.wijknaam),...buurtenData.features.filter(f=>f.properties.buurtnaam)].filter(f=>w[featCode(f)]>0);}
+// Gewogen keuze: gemiste gebieden komen vaker terug, nog onbekende iets vaker dan al gekende
+function weightedPick(pool){const w=getWeak(),m=getMastery(),ws=pool.map(f=>{const c=featCode(f);return 1+2*(w[c]||0)+(m[c]?0:0.5);});let r=Math.random()*ws.reduce((a,b)=>a+b,0);for(let i=0;i<pool.length;i++){r-=ws[i];if(r<=0)return pool[i];}return pool[pool.length-1];}
+function renderWeakButton(){const el=document.getElementById('weakButton');if(!el)return;const n=getWeakFeatures().length;el.innerHTML=n?`<button class="level-btn weak" onclick="startWeakGame()">🎯 Oefen je missers (${n}) <span class="level-desc">Alleen de gebieden die je nog vaak mist</span></button>`:'';}
+function startWeakGame(){
+    if(!selectedGemeente||!wijkenData)return;
+    const n=getWeakFeatures().length;if(!n)return;
+    isMultiplayer=false;prePickedTargets=[];trainingMode=false;bonusPhase=false;bonusQueue=[];
+    currentMode='missers';activeWijkCodes=[];activeWijkName='';
+    beginGame('missers',Math.min(n,MAX_ROUNDS));
+}
 function getMasteryCounts(){const m=getMastery();let wK=0,wT=0,bK=0,bT=0;if(wijkenData){wT=wijkenData.features.filter(f=>f.properties.wijknaam).length;wijkenData.features.forEach(f=>{if(f.properties.wijknaam&&m[f.properties.wijkcode])wK++;});}if(buurtenData){bT=buurtenData.features.filter(f=>f.properties.buurtnaam).length;buurtenData.features.forEach(f=>{if(f.properties.buurtnaam&&m[f.properties.buurtcode])bK++;});}return{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT};}
-function renderMastery(){const{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT}=getMasteryCounts();const wp=wT?Math.round(wK/wT*100):0,bp=bT?Math.round(bK/bT*100):0;document.getElementById('masterySection').innerHTML=`<div class="mastery-row"><div class="mastery-label">Wijken</div><div class="mastery-bar-bg"><div class="mastery-bar-fill wijken" style="width:${wp}%"></div></div><div class="mastery-count">${wK}/${wT}</div></div><div class="mastery-row"><div class="mastery-label">Buurten</div><div class="mastery-bar-bg"><div class="mastery-bar-fill buurten" style="width:${bp}%"></div></div><div class="mastery-count">${bK}/${bT}</div></div>`;}
+function renderMastery(){renderWeakButton();const{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT}=getMasteryCounts();const wp=wT?Math.round(wK/wT*100):0,bp=bT?Math.round(bK/bT*100):0;document.getElementById('masterySection').innerHTML=`<div class="mastery-row"><div class="mastery-label">Wijken</div><div class="mastery-bar-bg"><div class="mastery-bar-fill wijken" style="width:${wp}%"></div></div><div class="mastery-count">${wK}/${wT}</div></div><div class="mastery-row"><div class="mastery-label">Buurten</div><div class="mastery-bar-bg"><div class="mastery-bar-fill buurten" style="width:${bp}%"></div></div><div class="mastery-count">${bK}/${bT}</div></div>`;}
 function renderEndMastery(){const{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT}=getMasteryCounts();const wp=wT?Math.round(wK/wT*100):0,bp=bT?Math.round(bK/bT*100):0;document.getElementById('endMastery').innerHTML=`<div style="font-size:12px;color:#999;margin-bottom:6px">Je kent nu:</div><div class="mastery-row"><div class="mastery-label">Wijken</div><div class="mastery-bar-bg"><div class="mastery-bar-fill wijken" style="width:${wp}%"></div></div><div class="mastery-count">${wK}/${wT}</div></div><div class="mastery-row"><div class="mastery-label">Buurten</div><div class="mastery-bar-bg"><div class="mastery-bar-fill buurten" style="width:${bp}%"></div></div><div class="mastery-count">${bK}/${bT}</div></div>`;}
 
 // Highscores
@@ -287,7 +306,7 @@ function saveHighscore(l,s){const hs=getHighscores();if(!hs[l]||s>hs[l]){hs[l]=s
 function renderHighscores(){const hs=getHighscores(),labs={gemeenten:'Gem',wijken:'Wijk',wijkbonus:'W+B',training:'Train',cluster:'Blok',buurten:'Buurt'};document.getElementById('highscoreRow').innerHTML=LEVEL_DEFS.map(l=>{const v=hs[l.key]!=null?hs[l.key]:'—';return `<div class="hs-item"><div class="hs-label">${labs[l.key]||l.key}</div><div class="hs-value ${hs[l.key]==null?'none':''}">${v}</div></div>`;}).join('');}
 
 // Share (compact)
-function getLevelLabel(k){return(LEVEL_DEFS.find(l=>l.key===k)||{}).label||k;}
+function getLevelLabel(k){return(LEVEL_DEFS.find(l=>l.key===k)||{}).label||(k==='missers'?'Missers':k);}
 function createScoreImage(){const ln=getLevelLabel(currentLevelKey),pct=maxScore?Math.round(score/maxScore*100):0,{wijkenKnown:wK,wijkenTotal:wT,buurtenKnown:bK,buurtenTotal:bT}=getMasteryCounts(),gn=selectedGemeente?selectedGemeente.naam:'Quiz';const W=640,H=420,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');const g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#1e3a5f');g.addColorStop(1,'#0f1b2d');x.fillStyle=g;x.fillRect(0,0,W,H);x.globalAlpha=0.04;for(let i=0;i<W;i+=20){x.strokeStyle='#fff';x.beginPath();x.moveTo(i,0);x.lineTo(i,H);x.stroke();}x.globalAlpha=1;x.fillStyle='#fff';x.font='bold 28px "Segoe UI",system-ui,sans-serif';x.textAlign='center';x.fillText(`Leer ${gn} kennen`,W/2,50);x.fillStyle='#8faabe';x.font='italic 16px "Segoe UI",system-ui,sans-serif';x.fillText('Voor wijk-weters en buurt-bazen',W/2,76);x.font='bold 15px "Segoe UI",system-ui,sans-serif';const bw=x.measureText(ln).width+28,bc={gemeenten:'#7c3aed',wijken:'#22c55e',wijkbonus:'#3b82f6',training:'#eab308',cluster:'#f97316',buurten:'#ef4444'};x.fillStyle=bc[currentLevelKey]||'#2563eb';rr(x,(W-bw)/2,92,bw,30,15);x.fill();x.fillStyle='#fff';x.fillText(ln,W/2,112);x.fillStyle=pct>=70?'#22c55e':pct>=40?'#eab308':'#ef4444';x.font='bold 72px "Segoe UI",system-ui,sans-serif';x.fillText(`${score}`,W/2,195);x.fillStyle='#8faabe';x.font='18px "Segoe UI",system-ui,sans-serif';x.fillText(`van ${maxScore} punten (${pct}%)`,W/2,222);const by=258,bW2=260,bH=18,bX=(W-bW2)/2,wp=wT?wK/wT:0,bp=bT?bK/bT:0;x.fillStyle='#8faabe';x.font='14px "Segoe UI",system-ui,sans-serif';x.textAlign='right';x.fillText('Wijken',bX-10,by+14);x.textAlign='left';x.fillText(`${wK}/${wT}`,bX+bW2+10,by+14);x.fillStyle='#1a2d42';rr(x,bX,by,bW2,bH,9);x.fill();if(wp>0){const gw=x.createLinearGradient(bX,0,bX+bW2*wp,0);gw.addColorStop(0,'#2563eb');gw.addColorStop(1,'#60a5fa');x.fillStyle=gw;rr(x,bX,by,Math.max(bH,bW2*wp),bH,9);x.fill();}const by2=by+34;x.fillStyle='#8faabe';x.font='14px "Segoe UI",system-ui,sans-serif';x.textAlign='right';x.fillText('Buurten',bX-10,by2+14);x.textAlign='left';x.fillText(`${bK}/${bT}`,bX+bW2+10,by2+14);x.fillStyle='#1a2d42';rr(x,bX,by2,bW2,bH,9);x.fill();if(bp>0){const gb=x.createLinearGradient(bX,0,bX+bW2*bp,0);gb.addColorStop(0,'#16a34a');gb.addColorStop(1,'#4ade80');x.fillStyle=gb;rr(x,bX,by2,Math.max(bH,bW2*bp),bH,9);x.fill();}x.textAlign='center';x.fillStyle='#d4e0ed';x.font='bold 17px "Segoe UI",system-ui,sans-serif';x.fillText(`Ken jij ${gn} beter?`,W/2,365);x.fillStyle='#4a6478';x.font='12px "Segoe UI",system-ui,sans-serif';x.fillText('buurt-quiz',W/2,400);return c;}
 function rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.lineTo(a+w-r,b);x.quadraticCurveTo(a+w,b,a+w,b+r);x.lineTo(a+w,b+h-r);x.quadraticCurveTo(a+w,b+h,a+w-r,b+h);x.lineTo(a+r,b+h);x.quadraticCurveTo(a,b+h,a,b+h-r);x.lineTo(a,b+r);x.quadraticCurveTo(a,b,a+r,b);x.closePath();}
 async function shareScore(){const c=createScoreImage(),gn=selectedGemeente?selectedGemeente.naam:'Quiz';try{const b=await new Promise(r=>c.toBlob(r,'image/png'));const f=new File([b],'buurt-quiz.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],title:`${gn} Quiz`,text:`Ken jij ${gn} beter?`});else if(navigator.share){const p=maxScore?Math.round(score/maxScore*100):0;await navigator.share({title:`${gn} Quiz`,text:`🏘️ ${gn} Quiz — ${getLevelLabel(currentLevelKey)}\nScore: ${score}/${maxScore} (${p}%)`});}else{const u=c.toDataURL('image/png'),a=document.createElement('a');a.href=u;a.download='buurt-quiz.png';a.click();showFeedback('correct','Opgeslagen!');}}catch(e){if(e.name!=='AbortError'){const u=c.toDataURL('image/png'),a=document.createElement('a');a.href=u;a.download='buurt-quiz.png';a.click();}}}
@@ -505,13 +524,14 @@ function pickTarget(){
     if(isMultiplayer&&prePickedTargets.length){const t=prePickedTargets[currentRound-1];if(!t)return null;let f;if(t.type==='wijk')f=wijkenData.features.find(x=>x.properties.wijkcode===t.code);else f=buurtenData.features.find(x=>x.properties.buurtcode===t.code);return f?{feature:f,type:t.type}:null;}
     if(!trainingMode&&retryQueue.length>0&&Math.random()<0.5)return retryQueue.shift();
     let type,pool;const scope=activeWijkCodes;
+    if(currentMode==='missers'){pool=getWeakFeatures().filter(f=>!usedCodes.includes(featCode(f)));if(!pool.length)return null;const feat=weightedPick(pool);type=feat.properties.buurtcode?'buurt':'wijk';usedCodes.push(featCode(feat));return{feature:feat,type};}
     if(currentMode==='wijken'||currentMode==='wijkbonus'){type='wijk';pool=wijkenData.features.filter(f=>f.properties.wijknaam&&(scope.length?scope.includes(f.properties.wijkcode):true)&&!usedCodes.includes(f.properties.wijkcode));if(!pool.length)pool=wijkenData.features.filter(f=>f.properties.wijknaam);}
     else if(currentMode==='training'){type='buurt';pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f))&&!usedCodes.includes(f.properties.buurtcode));if(!pool.length)return null;}
     else if(currentMode==='buurten'){type='buurt';pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&!usedCodes.includes(f.properties.buurtcode));if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam);}
     else if(currentMode==='cluster'){type=currentRound%2===1?'wijk':'buurt';if(type==='wijk'){pool=wijkenData.features.filter(f=>f.properties.wijknaam&&scope.includes(f.properties.wijkcode)&&!usedCodes.includes(f.properties.wijkcode));if(!pool.length){type='buurt';pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f))&&!usedCodes.includes(f.properties.buurtcode));}}else{pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f))&&!usedCodes.includes(f.properties.buurtcode));}if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&scope.includes(findWijkCodeForBuurt(f)));}
     else{type=currentRound%2===1?'wijk':'buurt';if(type==='wijk'){pool=wijkenData.features.filter(f=>f.properties.wijknaam&&!usedCodes.includes(f.properties.wijkcode));if(!pool.length)pool=wijkenData.features.filter(f=>f.properties.wijknaam);}else{pool=buurtenData.features.filter(f=>f.properties.buurtnaam&&!usedCodes.includes(f.properties.buurtcode));if(!pool.length)pool=buurtenData.features.filter(f=>f.properties.buurtnaam);}}
     if(!pool||!pool.length)return null;
-    const feat=pool[Math.floor(Math.random()*pool.length)];usedCodes.push(type==='wijk'?feat.properties.wijkcode:feat.properties.buurtcode);return{feature:feat,type};
+    const feat=weightedPick(pool);usedCodes.push(type==='wijk'?feat.properties.wijkcode:feat.properties.buurtcode);return{feature:feat,type};
 }
 
 function nextRound(){
@@ -558,7 +578,7 @@ function updateCountdownDisplay(v){const e=document.getElementById('countdown');
 function applyPenalty(){roundStartTime-=MISCLICK_PENALTY*1000;}
 function stopTimer(){if(animFrame)cancelAnimationFrame(animFrame);animFrame=null;}
 
-function skipRound(){if(!gameActive||!targetFeature||roundLocked)return;if(trainingMode){showCorrectAndAdvance();return;}roundLocked=true;stopTimer();streak=0;const tc=getTargetCode();roundHistory.push({code:tc,type:targetType,result:'fail',points:0});if(!isMultiplayer&&!bonusPhase)retryQueue.push({feature:targetFeature,type:targetType});showAnswer(tc,'#f59e0b','#92400e');showFeedback('timeout','Overgeslagen');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(()=>{if(bonusPhase)nextBonusRound();else nextRound();},1500);}
+function skipRound(){if(!gameActive||!targetFeature||roundLocked)return;if(trainingMode){bumpWeak(getTargetCode(),2);showCorrectAndAdvance();return;}roundLocked=true;stopTimer();streak=0;const tc=getTargetCode();bumpWeak(tc,2);roundHistory.push({code:tc,type:targetType,result:'fail',points:0});if(!isMultiplayer&&!bonusPhase)retryQueue.push({feature:targetFeature,type:targetType});showAnswer(tc,'#f59e0b','#92400e');showFeedback('timeout','Overgeslagen');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(()=>{if(bonusPhase)nextBonusRound();else nextRound();},1500);}
 function stopGame(){if(!gameActive)return;stopTimer();endGame();}
 
 // ===== GUESS HANDLING =====
@@ -571,8 +591,8 @@ function handleGuess(cf){
         const cc=cf.properties.buurtcode,tc=targetFeature.properties.buurtcode;
         const cl=buurtLayers[cc],tl=buurtLayers[tc];
         roundLocked=true;
-        if(cc===tc){trainingCorrect++;if(cl)cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});showFeedback('correct','Goed!');setTimeout(nextRound,1000);}
-        else{if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.4,weight:2,color:'#991b1b'});if(tl){tl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});tl.bringToFront();}wijkenLayer.eachLayer(l=>l.bringToFront());showFeedback('wrong',targetFeature.properties.buurtnaam);setTimeout(nextRound,2500);}
+        if(cc===tc){trainingCorrect++;bumpWeak(tc,-2);if(cl)cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});showFeedback('correct','Goed!');setTimeout(nextRound,1000);}
+        else{bumpWeak(tc,2);if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.4,weight:2,color:'#991b1b'});if(tl){tl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});tl.bringToFront();}wijkenLayer.eachLayer(l=>l.bringToFront());showFeedback('wrong',targetFeature.properties.buurtnaam);setTimeout(nextRound,2500);}
         return;
     }
 
@@ -581,23 +601,23 @@ function handleGuess(cf){
     // BONUS PHASE
     if(bonusPhase){
         const cc=cf.properties.buurtcode,cl=buurtLayers[cc];
-        if(cc===tc){roundLocked=true;stopTimer();score+=3;roundHistory.push({code:tc,type:'buurt',result:'perfect',points:3});if(cl)cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});updateTotalScore();showFeedback('correct','Bonus!',3);if(isMultiplayer)sendMsg({type:'score',score});setTimeout(()=>nextBonusRound(),800);}
-        else{if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.3,weight:1,color:'#991b1b'});showFeedback('wrong','Mis');}
+        if(cc===tc){roundLocked=true;stopTimer();bumpWeak(tc,-2);score+=3;roundHistory.push({code:tc,type:'buurt',result:'perfect',points:3});if(cl)cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});updateTotalScore();showFeedback('correct','Bonus!',3);if(isMultiplayer)sendMsg({type:'score',score});setTimeout(()=>nextBonusRound(),800);}
+        else{bumpWeak(tc,1);if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.3,weight:1,color:'#991b1b'});showFeedback('wrong','Mis');}
         return;
     }
 
     // NORMAL: wijk target
     if(targetType==='wijk'){
         const cwc=findWijkCodeForBuurt(cf);
-        if(cwc===tc){roundLocked=true;stopTimer();const pts=getCurrentPoints();score+=pts;streak++;roundHistory.push({code:tc,type:'wijk',result:'perfect',points:pts});highlightWijk(tc,'#22c55e','#166534');updateCountdownDisplay(pts);updateTotalScore();updateStreak();showFeedback('correct','Goed!',pts);if(isMultiplayer)sendMsg({type:'score',score});
+        if(cwc===tc){roundLocked=true;stopTimer();bumpWeak(tc,-2);const pts=getCurrentPoints();score+=pts;streak++;roundHistory.push({code:tc,type:'wijk',result:'perfect',points:pts});highlightWijk(tc,'#22c55e','#166534');updateCountdownDisplay(pts);updateTotalScore();updateStreak();showFeedback('correct','Goed!',pts);if(isMultiplayer)sendMsg({type:'score',score});
             if(currentMode==='wijkbonus'){setTimeout(()=>enterBonusPhase(tc),1000);}else{setTimeout(nextRound,1000);}
-        }else{applyPenalty();highlightWijk(cwc,'#ef4444','#991b1b');showFeedback('wrong',`-${MISCLICK_PENALTY}s`);if(getCurrentPoints()<=0){roundLocked=true;stopTimer();streak=0;roundHistory.push({code:tc,type:'wijk',result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:'wijk'});highlightWijk(tc,'#22c55e','#166534');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}}
+        }else{bumpWeak(tc,1);applyPenalty();highlightWijk(cwc,'#ef4444','#991b1b');showFeedback('wrong',`-${MISCLICK_PENALTY}s`);if(getCurrentPoints()<=0){roundLocked=true;stopTimer();streak=0;roundHistory.push({code:tc,type:'wijk',result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:'wijk'});highlightWijk(tc,'#22c55e','#166534');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}}
     }
     // NORMAL: buurt target
     else{
         const cc=cf.properties.buurtcode,cl=buurtLayers[cc];
-        if(cc===tc){roundLocked=true;stopTimer();const pts=getCurrentPoints();score+=pts;streak++;roundHistory.push({code:tc,type:'buurt',result:'perfect',points:pts});cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});updateCountdownDisplay(pts);updateTotalScore();updateStreak();showFeedback('correct','Goed!',pts);if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,1000);}
-        else{applyPenalty();if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.4,weight:2,color:'#991b1b'});showFeedback('wrong',`-${MISCLICK_PENALTY}s`);if(getCurrentPoints()<=0){roundLocked=true;stopTimer();streak=0;roundHistory.push({code:tc,type:'buurt',result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:'buurt'});const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});tl.bringToFront();wijkenLayer.eachLayer(l=>l.bringToFront());}updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}}
+        if(cc===tc){roundLocked=true;stopTimer();bumpWeak(tc,-2);const pts=getCurrentPoints();score+=pts;streak++;roundHistory.push({code:tc,type:'buurt',result:'perfect',points:pts});cl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});updateCountdownDisplay(pts);updateTotalScore();updateStreak();showFeedback('correct','Goed!',pts);if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,1000);}
+        else{bumpWeak(tc,1);applyPenalty();if(cl)cl.setStyle({fillColor:'#ef4444',fillOpacity:0.4,weight:2,color:'#991b1b'});showFeedback('wrong',`-${MISCLICK_PENALTY}s`);if(getCurrentPoints()<=0){roundLocked=true;stopTimer();streak=0;roundHistory.push({code:tc,type:'buurt',result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:'buurt'});const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:'#22c55e',fillOpacity:0.5,weight:3,color:'#166534'});tl.bringToFront();wijkenLayer.eachLayer(l=>l.bringToFront());}updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}}
     }
 }
 
@@ -609,7 +629,7 @@ function getTargetCode(){return targetType==='wijk'?targetFeature.properties.wij
 function highlightWijk(wc,fc,bc){buurtenLayer.eachLayer(l=>{if(findWijkCodeForBuurt(l.feature)===wc)l.setStyle({fillColor:fc,fillOpacity:0.45,weight:0,color:'transparent'});});const wl=wijkLayers[wc];if(wl){wl.setStyle({weight:4,opacity:1,color:bc});wl.bringToFront();}}
 function showAnswer(tc,fc,bc){if(targetType==='wijk')highlightWijk(tc,fc,bc);else{const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:fc,fillOpacity:0.5,weight:3,color:bc});tl.bringToFront();wijkenLayer.eachLayer(l=>l.bringToFront());}}}
 
-function handleTimeout(){if(currentMode==='gemeenten'){handleGemeenteTimeout();return;}if(!gameActive||!targetFeature||roundLocked)return;roundLocked=true;streak=0;const tc=getTargetCode();roundHistory.push({code:tc,type:targetType,result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:targetType});showAnswer(tc,'#f59e0b','#92400e');showFeedback('timeout','Te laat!');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}
+function handleTimeout(){if(currentMode==='gemeenten'){handleGemeenteTimeout();return;}if(!gameActive||!targetFeature||roundLocked)return;roundLocked=true;streak=0;const tc=getTargetCode();bumpWeak(tc,2);roundHistory.push({code:tc,type:targetType,result:'fail',points:0});if(!isMultiplayer)retryQueue.push({feature:targetFeature,type:targetType});showAnswer(tc,'#f59e0b','#92400e');showFeedback('timeout','Te laat!');updateCountdownDisplay(0);updateTotalScore();updateStreak();if(isMultiplayer)sendMsg({type:'score',score});setTimeout(nextRound,2000);}
 function bonusTimeout(){if(!gameActive||!targetFeature||roundLocked)return;roundLocked=true;const tc=getTargetCode();const tl=buurtLayers[tc];if(tl){tl.setStyle({fillColor:'#f59e0b',fillOpacity:0.5,weight:2,color:'#92400e'});tl.bringToFront();}showFeedback('timeout','Te laat');updateCountdownDisplay(0);setTimeout(()=>nextBonusRound(),1200);}
 
 function endGame(){
@@ -638,7 +658,7 @@ function endGame(){
     const mpRes=document.getElementById('mpResult');
     if(isMultiplayer){mpRes.style.display='block';document.getElementById('mpVs').textContent=`Jij: ${score} — Tegenstander: ${opponentScore}`;document.getElementById('mpWinner').textContent=score>opponentScore?'🏆 Je hebt gewonnen!':score<opponentScore?'Tegenstander wint!':'Gelijkspel!';}else mpRes.style.display='none';
 
-    const isNew=saveHighscore(currentLevelKey,score);const hs=document.getElementById('endHighscore');hs.className='end-highscore'+(isNew?' new':'');hs.textContent=isNew?'Nieuw record!':'';
+    const isNew=currentLevelKey!=='missers'&&saveHighscore(currentLevelKey,score);const hs=document.getElementById('endHighscore');hs.className='end-highscore'+(isNew?' new':'');hs.textContent=isNew?'Nieuw record!':'';
     renderEndMastery();document.getElementById('endOverlay').style.display='flex';
 }
 
